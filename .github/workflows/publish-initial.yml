@@ -1,0 +1,36 @@
+name: Publish initial SVN community release
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/publish-initial.yml
+permissions:
+  contents: write
+jobs:
+  publish:
+    if: github.repository == 'hdpsowk-rgb/openidea-svn'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Expand reviewed source and publish signed package
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [ ! -f bootstrap-source.zip ]; then
+            echo "Initial release source has already been expanded."
+            exit 0
+          fi
+          echo "fc25cd68294f4861fb0832baa5146a336c657e3ea639b03c8bb3778e3c2b1e17  hdpsowk-rgb.svn-0.1.3.oiplugin" | sha256sum --check
+          unzip -q bootstrap-source.zip
+          mkdir -p release
+          mv hdpsowk-rgb.svn-0.1.3.oiplugin release/
+          rm bootstrap-source.zip
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Publish SVN plugin source and documentation"
+          git push origin HEAD:main
+          gh release create v0.1.3 release/hdpsowk-rgb.svn-0.1.3.oiplugin --target "$(git rev-parse HEAD)" --title "SVN 0.1.3 for OpenIDEA" --notes "Initial signed community release. Workspace directory selection, native diffs, selected commits, SVN history and operations inside OpenIDEA. Automatic refresh is off by default with a configurable interval. Includes Windows path normalization and UTF-8 diff fixes. Requires an installed SVN command-line client. Tested on macOS; Windows GUI and remote hosts remain unverified."
