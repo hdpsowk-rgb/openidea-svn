@@ -8,7 +8,7 @@ with zipfile.ZipFile(sys.argv[1]) as package:
     for name in names:
         path=PurePosixPath(name)
         if path.is_absolute() or '..' in path.parts or '\\' in name:raise SystemExit('Unsafe archive path: '+name)
-    for name in ['plugin.toml','dist/plugin.wasm','web/index.html','web/app.js','web/model.js','web/style.css','locales/zh-CN.json','icon.svg','LICENSE','NOTICE.md']:
+    for name in ['plugin.toml','dist/plugin.wasm','web/index.html','web/app.js','web/model.js','web/style.css','web/file-icons.js','web/file-icons.css','locales/zh-CN.json','icon.svg','LICENSE','NOTICE.md']:
         if name not in names:raise SystemExit('Missing package file: '+name)
     manifest=package.read('plugin.toml').decode()
     if not re.search(r'^id\s*=\s*"hdpsowk-rgb\.svn"',manifest,re.M):raise SystemExit('Wrong plugin id')

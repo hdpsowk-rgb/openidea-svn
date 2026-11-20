@@ -1,6 +1,6 @@
 {
   "name": "openidea-svn",
-  "version": "0.1.6",
+  "version": "0.1.8",
   "private": true,
   "type": "module",
   "scripts": { "test": "node --test test/*.test.mjs" },

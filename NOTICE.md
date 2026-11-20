@@ -15,6 +15,20 @@ versions. Development-only tempfile and its dependencies are not shipped in
 the component. SVN itself is not bundled; the installed SVN executable and its
 license remain managed by the user.
 
+## Bundled file and folder artwork
+
+The SVG sources in `assets/file-icons/` include OpenIDEA Material Icons from
+l0ng-ai/openidea v0.1.49, commit
+`1a12c88f0c6e6e56d4c68300a4ae296ad189d63c`, Copyright OpenIDEA contributors,
+licensed under Apache-2.0 (full text below). Source paths and SHA-256 hashes of
+unmodified icons are recorded in `assets/file-icons/PROVENANCE.json`.
+The twelve semantic folder variants modify the upstream folder silhouette with
+custom colors/emblems and are marked in each SVG. Composer artwork is original
+SVN plugin artwork under MIT. `tools/build-file-icons.py` embeds these SVGs in
+`web/file-icons.css` as local data URLs and adapts two neutral icons for dark
+backgrounds. No external icon font, CDN, file content or network access is used.
+These bundled icons do not follow the IDE's selected file icon theme.
+
 ## OpenIDEA / Apache-2.0 license
 
                                  Apache License

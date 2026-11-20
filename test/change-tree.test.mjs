@@ -23,8 +23,12 @@ test('tree grouping, filtering and folder checks preserve exact selected SVN tar
     const disclosure=path=>row(path)?.children.find(el=>el.tagName==='button');
     assert.ok(row('frontend'),'directory ancestors were not rendered');assert.ok(row('frontend/src'));assert.equal(row('frontend/src/a.js').children.find(el=>el.className==='path').textContent,'a.js');
     assert.equal(row('frontend/src/a.js').title,'frontend/src/a.js');
+    const fileIcon=path=>row(path).children.find(el=>el.className==='file-kind-icon');
+    assert.equal(fileIcon('frontend/src/a.js')?.dataset.icon,'javascript','file type icon missing');
+    assert.equal(fileIcon('frontend/src')?.dataset.icon,'folder-src','named folder icon missing');
+    assert.equal(fileIcon('frontend')?.dataset.icon,'folder-open');
     const beforeDoubleClick=sent.length;
-    row('frontend').fire('dblclick');assert.equal(row('frontend/src/a.js'),undefined,'double-click did not collapse directory');
+    row('frontend').fire('dblclick');assert.equal(row('frontend/src/a.js'),undefined,'double-click did not collapse directory');assert.equal(fileIcon('frontend').dataset.icon,'folder');
     row('frontend').fire('dblclick');assert.ok(row('frontend/src/a.js'),'double-click did not expand directory');
     row('frontend').fire('dblclick',{target:checkbox('frontend')});assert.ok(row('frontend/src/a.js'),'checkbox double-click collapsed directory');
     assert.equal(sent.length,beforeDoubleClick,'directory double-click invoked SVN');
@@ -45,7 +49,7 @@ test('tree grouping, filtering and folder checks preserve exact selected SVN tar
     get('filter').value='';get('filter').fire('input');assert.equal(row('frontend/src/a.js'),undefined);assert.equal(checkbox('frontend').indeterminate,true);
     get('expand-all').click();assert.ok(row('frontend/src/a.js'));row('frontend/src/a.js').fire('dblclick');assert.equal(sent.at(-1).action,'diff');assert.deepEqual(sent.at(-1).paths,['frontend/src/a.js']);reply({});
     get('changes-view').value='list';get('changes-view').fire('change');assert.equal(sent.at(-1).action,'view-mode');assert.equal(sent.at(-1).viewMode,'list');reply({viewMode:'list'});
-    assert.equal(row('frontend'),undefined);assert.equal(row('frontend/src/a.js').children.find(el=>el.className==='path').textContent,'frontend/src/a.js');
+    assert.equal(row('frontend'),undefined);assert.equal(fileIcon('frontend/src/a.js').dataset.icon,'javascript');assert.equal(row('frontend/src/a.js').children.find(el=>el.className==='path').textContent,'frontend/src/a.js');
     get('changes-view').value='tree';get('changes-view').fire('change');reply({viewMode:'tree'});assert.ok(row('frontend'));
     get('collapse-all').click();get('refresh').click();reply({entries:[...entries,{path:'frontend/src/another.js',status:'modified',kind:'file'}]});assert.equal(row('frontend/src/a.js'),undefined,'refresh forgot collapsed state');
     get('expand-all').click();row('frontend/src/a.js').click();disclosure('frontend').click();get('revert').click();

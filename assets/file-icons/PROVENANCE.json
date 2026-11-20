@@ -1,0 +1,277 @@
+{
+  "repository": "https://github.com/l0ng-ai/openidea",
+  "commit": "1a12c88f0c6e6e56d4c68300a4ae296ad189d63c",
+  "tag": "v0.1.49",
+  "license": "Apache-2.0 (upstream assets); MIT (original Composer artwork)",
+  "icons": {
+    "php": {
+      "source": "plugins/official/material-icons/icons/php.svg",
+      "sha256": "6a5baf54c3df10fb0eebec038666448683474a1c83aab558de24fa2b9a1780f9",
+      "modified": false
+    },
+    "javascript": {
+      "source": "plugins/official/material-icons/icons/javascript.svg",
+      "sha256": "abcedba110de2f9ef094b883fc62e4e0970b37927042860a4526e04934a408cf",
+      "modified": false
+    },
+    "typescript": {
+      "source": "plugins/official/material-icons/icons/typescript.svg",
+      "sha256": "5cd73980372be0be2785ee40f8a7c52da2710ff112a772fc892c606024d5e8ba",
+      "modified": false
+    },
+    "vue": {
+      "source": "plugins/official/material-icons/icons/vue.svg",
+      "sha256": "f54ac92fad24e513c5cf59259529a136903816e0da62b26e44159dab747ddd54",
+      "modified": false
+    },
+    "react": {
+      "source": "plugins/official/material-icons/icons/react.svg",
+      "sha256": "cef9cbf494dd08328ff296fc0ea8431a8343d01e85f62c5915ffc0ffbe5f5bed",
+      "modified": false
+    },
+    "react-ts": {
+      "source": "plugins/official/material-icons/icons/react-ts.svg",
+      "sha256": "07414d46bf376a30aa4ee26683c33ebb3e306bbaeddc38a7e528db034393fd49",
+      "modified": false
+    },
+    "html": {
+      "source": "plugins/official/material-icons/icons/html.svg",
+      "sha256": "9bdd61d56591ed8b0c42ec3f00d260c3bb8d743c601da6b0426bb8b26a2bbe71",
+      "modified": false
+    },
+    "css": {
+      "source": "plugins/official/material-icons/icons/css.svg",
+      "sha256": "199703a9723b5090c4b999936686901dbbf050d02b99063469c2389dcc124312",
+      "modified": false
+    },
+    "sass": {
+      "source": "plugins/official/material-icons/icons/sass.svg",
+      "sha256": "08d1f0f056d735db74e92fbda46e5687d80668f239a559d771ce080aa00483d1",
+      "modified": false
+    },
+    "less": {
+      "source": "plugins/official/material-icons/icons/less.svg",
+      "sha256": "e0a2eeb0cd8f9ab41d5673bf85dafa728db2d8b2e2a163f33179af1c1df25643",
+      "modified": false
+    },
+    "python": {
+      "source": "plugins/official/material-icons/icons/python.svg",
+      "sha256": "ae35b907bb37decfbc55dfb5c590e24a7f881e471dbd14f94d538703fea4c96a",
+      "modified": false
+    },
+    "java": {
+      "source": "plugins/official/material-icons/icons/java.svg",
+      "sha256": "36bb37ad1ba046a3cbc08c98f7f9e3338104ae6b3faaf8477a2a63bd752e0218",
+      "modified": false
+    },
+    "go": {
+      "source": "plugins/official/material-icons/icons/go.svg",
+      "sha256": "1f55b1d9466670d7172e7a6809529ecb6a808eefd48ed41fa2cae5b7e088f633",
+      "modified": false
+    },
+    "rust": {
+      "source": "plugins/official/material-icons/icons/rust.svg",
+      "sha256": "97411e0c51eccd4a6d9f731a6f29fc9dd3735793f7ce4d223da3cc63c49aedd6",
+      "modified": false
+    },
+    "c": {
+      "source": "plugins/official/material-icons/icons/c.svg",
+      "sha256": "aabd15c4109b6361a1cd0ef6eaaaf2867738bc5172f462e8c65af4701eda6016",
+      "modified": false
+    },
+    "cpp": {
+      "source": "plugins/official/material-icons/icons/cpp.svg",
+      "sha256": "817390f23330e085559d6d9a359a60016694aa606cdb16bf86e2fa0b8462c9e2",
+      "modified": false
+    },
+    "shell": {
+      "source": "plugins/official/material-icons/icons/shell.svg",
+      "sha256": "47fa655f615e23d08cbe54c07ab469585fd68074b1094a6e95e123c22ae76e7c",
+      "modified": false
+    },
+    "json": {
+      "source": "plugins/official/material-icons/icons/json.svg",
+      "sha256": "8570c54bc6b0b7d2d16507293f7e59141782ca4fc042222104cdf989df5dc843",
+      "modified": false
+    },
+    "yaml": {
+      "source": "plugins/official/material-icons/icons/yaml.svg",
+      "sha256": "88278589dc81cccf74b18fdbf81186da47841e5454bf6648d0251dc4b24990ee",
+      "modified": false
+    },
+    "xml": {
+      "source": "plugins/official/material-icons/icons/xml.svg",
+      "sha256": "51d4a377788986d45960c03502d75fad2f2871e1c9b9dc8cacfce0fe4d341be6",
+      "modified": false
+    },
+    "toml": {
+      "source": "plugins/official/material-icons/icons/toml.svg",
+      "sha256": "bc6d14e844bfd1781d4886d472e7f803855956d1e9ecd0fe2b317741b6d58adf",
+      "modified": false
+    },
+    "ini": {
+      "source": "plugins/official/material-icons/icons/ini.svg",
+      "sha256": "4b91d64e839b205b9a65431ab973281575a22d960691e7cb5ef7dda2170ad31e",
+      "modified": false
+    },
+    "env": {
+      "source": "plugins/official/material-icons/icons/env.svg",
+      "sha256": "355d2b96f99b78baecdeba4399058e77ed04adcf108575213cfd4d536f2fbf5a",
+      "modified": false
+    },
+    "graphql": {
+      "source": "plugins/official/material-icons/icons/graphql.svg",
+      "sha256": "26577a99056ef697e162956e940289a105a9e05e686a2df4ef4c35a82d5b697f",
+      "modified": false
+    },
+    "markdown": {
+      "source": "plugins/official/material-icons/icons/markdown.svg",
+      "sha256": "e6e4eb9c1271b247e7f7409d008b792258e5532e301d554bb0445274e96429d2",
+      "modified": false
+    },
+    "text": {
+      "source": "plugins/official/material-icons/icons/text.svg",
+      "sha256": "98825f9be1ac00d516374c51628102aa9a5473e4db66c45726d0e31f8c354935",
+      "modified": false
+    },
+    "log": {
+      "source": "plugins/official/material-icons/icons/log.svg",
+      "sha256": "03812c9e583eb7b391689c3b46253ae65df91e89518e6d5b6c6d217656cdde01",
+      "modified": false
+    },
+    "image": {
+      "source": "plugins/official/material-icons/icons/image.svg",
+      "sha256": "b97953912e22f10522d3d2b0beb095cbe2846c3cbe3c83910ef37a631d3930fc",
+      "modified": false
+    },
+    "svg": {
+      "source": "plugins/official/material-icons/icons/svg.svg",
+      "sha256": "3f114538864d0fb0899eae83fac541feeb7a78d4257f310cd4a75680d0f99ca7",
+      "modified": false
+    },
+    "pdf": {
+      "source": "plugins/official/material-icons/icons/pdf.svg",
+      "sha256": "402bb04392585fb88e710c92b01820abe2f0a82088ba775bd378763e52d01ad5",
+      "modified": false
+    },
+    "archive": {
+      "source": "plugins/official/material-icons/icons/archive.svg",
+      "sha256": "f1d608751bba89674d2efd4fe3f87f99650194b66e26a8ac26f647a3b57945c3",
+      "modified": false
+    },
+    "font": {
+      "source": "plugins/official/material-icons/icons/font.svg",
+      "sha256": "6cf292975500dc5facd75972e836af5bcf7903106cea7e68221f7a0d8c2422b5",
+      "modified": false
+    },
+    "npm": {
+      "source": "plugins/official/material-icons/icons/npm.svg",
+      "sha256": "4454447f7c4fa55c117d1e621783709e82f917ba4b2f45f78bb27f0102932cee",
+      "modified": false
+    },
+    "docker": {
+      "source": "plugins/official/material-icons/icons/docker.svg",
+      "sha256": "d54fa03ebafab66e04a644c41e4b2f73f6af1c05e90f7f075349f870e063d26e",
+      "modified": false
+    },
+    "git": {
+      "source": "plugins/official/material-icons/icons/git.svg",
+      "sha256": "fc343ef150d1c2e24adb7740be50a3503b2351e4b09d9fca67a86ca829f178bc",
+      "modified": false
+    },
+    "lock": {
+      "source": "plugins/official/material-icons/icons/lock.svg",
+      "sha256": "eb9a747cd1815f93f8e2891db1c3624e5cb8bcc4d374e3239732cc4b506dcf68",
+      "modified": false
+    },
+    "test": {
+      "source": "plugins/official/material-icons/icons/test.svg",
+      "sha256": "9412573f71cf253131adb97cf8949dac290a7403747856d8f277fefd53295550",
+      "modified": false
+    },
+    "file": {
+      "source": "plugins/official/material-icons/icons/file.svg",
+      "sha256": "7e3f934ca061cf653abc374319e592f8a0e65a8b7e0b77b0d176faaf5fe1eaea",
+      "modified": false
+    },
+    "folder": {
+      "source": "plugins/official/material-icons/icons/folder.svg",
+      "sha256": "19a13430e815ba8a78b7a1147141625ce5ace5f3ddb959b279955b081ce9ab4c",
+      "modified": false
+    },
+    "folder-open": {
+      "source": "plugins/official/material-icons/icons/folder-open.svg",
+      "sha256": "20aa2309d940bf9cf42b8ff798aa7610bde4bedd0b07e84db8a513e8e5d1fc12",
+      "modified": false
+    },
+    "sql": {
+      "source": "plugins/official/material-icons/icons/database.svg",
+      "sha256": "c32cdb261f7e979bfa12f85bfaccc215099da9a10da63f869b11c0a748cfcc2c",
+      "modified": false
+    },
+    "composer": {
+      "source": "Original SVN plugin artwork",
+      "modified": false
+    },
+    "folder-src": {
+      "source": "plugins/official/material-icons/icons/folder-src.svg",
+      "modified": true,
+      "changes": "Custom semantic emblem and color"
+    },
+    "folder-api": {
+      "source": "plugins/official/material-icons/icons/folder-src.svg",
+      "modified": true,
+      "changes": "Custom semantic emblem and color"
+    },
+    "folder-controller": {
+      "source": "plugins/official/material-icons/icons/folder-src.svg",
+      "modified": true,
+      "changes": "Custom semantic emblem and color"
+    },
+    "folder-model": {
+      "source": "plugins/official/material-icons/icons/folder-src.svg",
+      "modified": true,
+      "changes": "Custom semantic emblem and color"
+    },
+    "folder-view": {
+      "source": "plugins/official/material-icons/icons/folder-src.svg",
+      "modified": true,
+      "changes": "Custom semantic emblem and color"
+    },
+    "folder-components": {
+      "source": "plugins/official/material-icons/icons/folder-src.svg",
+      "modified": true,
+      "changes": "Custom semantic emblem and color"
+    },
+    "folder-config": {
+      "source": "plugins/official/material-icons/icons/folder-src.svg",
+      "modified": true,
+      "changes": "Custom semantic emblem and color"
+    },
+    "folder-assets": {
+      "source": "plugins/official/material-icons/icons/folder-src.svg",
+      "modified": true,
+      "changes": "Custom semantic emblem and color"
+    },
+    "folder-tests": {
+      "source": "plugins/official/material-icons/icons/folder-src.svg",
+      "modified": true,
+      "changes": "Custom semantic emblem and color"
+    },
+    "folder-database": {
+      "source": "plugins/official/material-icons/icons/folder-src.svg",
+      "modified": true,
+      "changes": "Custom semantic emblem and color"
+    },
+    "folder-deps": {
+      "source": "plugins/official/material-icons/icons/folder-src.svg",
+      "modified": true,
+      "changes": "Custom semantic emblem and color"
+    },
+    "folder-ide": {
+      "source": "plugins/official/material-icons/icons/folder-src.svg",
+      "modified": true,
+      "changes": "Custom semantic emblem and color"
+    }
+  }
+}
