@@ -3,7 +3,7 @@ import {reconcileSelection, committable, shouldRefresh, acceptResponse, snapshot
 
 const $ = id => document.getElementById(id);
 const bridge = window.openidea;
-const state = {client:`svn-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,10)}`,root:null,pendingRoot:null,roots:[],generation:0,entries:[],selected:new Set(),active:null,activeFolder:null,includeIgnored:false,logs:[],historyPaths:[],busy:false,lastRefresh:0,visible:true,documentVisible:!document.hidden,tab:'changes',info:null,refreshSettings:{enabled:false,intervalSeconds:30},viewMode:'tree',collapsed:new Set()};
+const state = {client:`svn-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,10)}`,root:null,pendingRoot:null,roots:[],generation:0,entries:[],selected:new Set(),active:null,activeFolder:null,includeIgnored:false,logs:[],historyPaths:[],pendingHistoryPaths:null,historyHasMore:false,historyLimitReached:false,busy:false,lastRefresh:0,visible:true,documentVisible:!document.hidden,tab:'changes',info:null,refreshSettings:{enabled:false,intervalSeconds:30},viewMode:'tree',collapsed:new Set()};
 const labels = {modified:'修改',added:'新增',deleted:'删除',missing:'缺失',unversioned:'未跟踪',conflicted:'冲突',replaced:'替换（需终端确认）',external:'外部副本',normal:'属性修改',obstructed:'阻塞',incomplete:'不完整',ignored:'已忽略'};
 const badges = {modified:'M',added:'A',deleted:'D',missing:'!',unversioned:'?',conflicted:'C',replaced:'R',external:'X',ignored:'I',normal:'P',obstructed:'~',incomplete:'!'};
 
@@ -15,6 +15,7 @@ function send(action, extra={}, next=true) {
 function request(action, extra={}) {
   if (state.busy) return;
   if (action==='refresh') {state.lastRefresh=Date.now();extra={includeIgnored:$('show-ignored').checked,...extra};}
+  if(action==='log')state.pendingHistoryPaths=[...(extra.paths||[])];
   notice(''); setBusy(true, '正在执行…'); send(action,extra);
 }
 function notice(text) { $('notice').textContent=text; $('notice').classList.toggle('hidden',!text); }
@@ -32,6 +33,7 @@ function setBusy(busy,label) {
   $('status').textContent=label || (busy?'正在执行…':`${state.entries.length} 项本地变更`);
   $('cancel').classList.toggle('hidden',!busy);
   for (const el of document.querySelectorAll('[data-write],#refresh,#reload-log,#more-log,#authenticate,#diff,#open')) el.disabled=busy;
+  $('project-log').disabled=busy;
   updateSelection();
 }
 function node(tag, cls, text) {const el=document.createElement(tag);if(cls)el.className=cls;if(text!==undefined)el.textContent=text;return el;}
@@ -107,6 +109,7 @@ function switchTab(tab, load=true) {
 }
 function renderHistory() {
   $('history-scope').textContent=state.historyPaths.length?`文件：${state.historyPaths.join(', ')}`:'当前项目 · 双击路径查看历史差异';
+  if(state.historyLimitReached)$('history-scope').textContent+=' · 已达日志加载上限，请使用文件历史缩小范围';
   $('history-scope').title=state.historyPaths.join(', ');
   $('project-log').classList.toggle('hidden',!state.historyPaths.length);
   const list=$('logs');list.replaceChildren();
@@ -118,7 +121,7 @@ function renderHistory() {
     row.addEventListener('click',activate);row.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();activate();}});list.append(row);
   }
   if(!state.logs.length)list.append(node('div','empty muted','没有提交记录'));
-  $('more-log').classList.toggle('hidden',state.logs.length===0||state.logs.at(-1).revision<=1);
+  $('more-log').classList.toggle('hidden',!state.historyHasMore);
 }
 function renderLogDetail(log) {
   const el=$('log-detail');el.replaceChildren(node('strong','',`版本 ${log.revision}`),node('div','muted small',`${log.author} · ${new Date(log.date).toLocaleString()}`),node('pre','',log.message));
@@ -135,7 +138,7 @@ function renderRoots(roots) {
   select.value=state.pendingRoot||state.root||roots[0]||'';select.title=select.value;
 }
 function resetDirectory() {
-  state.entries=[];state.selected=new Set();state.active=null;state.activeFolder=null;state.logs=[];state.historyPaths=[];state.info=null;state.lastRefresh=0;state.collapsed=new Set();
+  state.entries=[];state.selected=new Set();state.active=null;state.activeFolder=null;state.logs=[];state.historyPaths=[];state.pendingHistoryPaths=null;state.historyHasMore=false;state.historyLimitReached=false;state.info=null;state.lastRefresh=0;state.collapsed=new Set();
   $('filter').value='';$('message').value='';$('output').textContent='';$('repository').textContent='正在读取工作副本…';$('repository').title='';
   renderFiles();renderHistory();$('log-detail').replaceChildren(node('div','empty muted','选择一条提交记录'));switchTab('changes',false);
 }
@@ -164,11 +167,11 @@ if(bridge) {
     if(message.output)output(message.output);
     if(message.info){state.info=message.info;$('repository').textContent=`${message.info.url} · r${message.info.revision}`;$('repository').title=message.info.url;}
     if(message.entries){const changed=snapshotChanged(state.entries,message.entries);state.entries=message.entries;state.selected=reconcileSelection(state.selected,state.entries);if(!state.entries.some(e=>e.path===state.active))state.active=null;state.lastRefresh=Date.now();if(changed)renderFiles();}
-    if(message.logs){state.logs=message.append?[...state.logs,...message.logs.filter(l=>!state.logs.some(old=>old.revision===l.revision))]:message.logs;if(!message.append)$('log-detail').replaceChildren(node('div','empty muted','选择一条提交记录'));renderHistory();}
+    if(message.logs){if(state.pendingHistoryPaths!==null)state.historyPaths=state.pendingHistoryPaths;state.pendingHistoryPaths=null;state.logs=message.append?[...state.logs,...message.logs.filter(l=>!state.logs.some(old=>old.revision===l.revision))]:message.logs;state.historyHasMore=Boolean(message.hasMore);state.historyLimitReached=Boolean(message.historyLimitReached);if(!message.append)$('log-detail').replaceChildren(node('div','empty muted','选择一条提交记录'));renderHistory();}
     if(message.selectPaths){state.activeFolder=null;state.selected=new Set(message.selectPaths.filter(p=>state.entries.some(e=>e.path===p&&committable(e))));state.active=message.selectPaths[0]||null;renderFiles();}
     if(message.clearMessage)$('message').value='';
     if(message.type==='hello'){$('message').value=message.draft||'';updateSelection();}
-    if(message.error){notice(message.error);$('show-ignored').checked=state.includeIgnored;$('changes-view').value=state.viewMode;$('auto-refresh').checked=state.refreshSettings.enabled;$('refresh-interval').value=String(state.refreshSettings.intervalSeconds);}
+    if(message.error){state.pendingHistoryPaths=null;notice(message.error);$('show-ignored').checked=state.includeIgnored;$('changes-view').value=state.viewMode;$('auto-refresh').checked=state.refreshSettings.enabled;$('refresh-interval').value=String(state.refreshSettings.intervalSeconds);}
     setBusy(Boolean(message.busy),message.status);
     if(message.menuDirectory&&message.menuDirectory!==state.root&&!state.busy){selectRoot(message.menuDirectory);return;}
     if(message.type==='hello'){request('refresh');}
@@ -177,7 +180,7 @@ if(bridge) {
       state.active=paths[0]||null;state.activeFolder=null;
       if(paths.length)state.selected=new Set(paths.filter(p=>state.entries.some(e=>e.path===p&&committable(e))));
       renderFiles();
-      if(action==='log'){state.historyPaths=[...paths];switchTab('history',false);if(!state.busy)request('log',{paths:state.historyPaths});}
+      if(action==='log'){switchTab('history',false);if(!state.busy)request('log',{paths});}
       else if(['diff','add','revert'].includes(action)&&paths.length)request(action,{paths});
       else if(action==='update')request('update');
       else switchTab('changes');
@@ -215,8 +218,8 @@ $('resolve').addEventListener('change',()=>{const accept=$('resolve').value;if(a
 $('commit').addEventListener('click',()=>request('commit',{paths:[...state.selected],message:$('message').value}));
 $('cancel').addEventListener('click',()=>send('cancel',{},false));
 $('reload-log').addEventListener('click',()=>request('log',{paths:state.historyPaths}));
-$('project-log').addEventListener('click',()=>{state.historyPaths=[];request('log',{paths:[]});});
-$('more-log').addEventListener('click',()=>{const revision=state.logs.at(-1)?.revision;if(revision>1)request('log',{paths:state.historyPaths,revision:revision-1,append:true});});
+$('project-log').addEventListener('click',()=>{if(state.busy)return;request('log',{paths:[]});});
+$('more-log').addEventListener('click',()=>{const revision=state.logs.at(-1)?.revision;if(state.historyHasMore&&revision>1)request('log',{paths:state.historyPaths,revision:revision-1,append:true});});
 $('clear-output').addEventListener('click',()=>{$('output').textContent='';});
 document.addEventListener('visibilitychange',()=>{state.documentVisible=!document.hidden;});
 new IntersectionObserver(entries=>{state.visible=entries.some(entry=>entry.isIntersecting);}).observe(document.querySelector('main'));

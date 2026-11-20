@@ -26,6 +26,9 @@ pub fn svn_error(stderr: &str) -> Error {
         "工作副本被锁定，请确认没有其他 SVN 操作后点击「清理」。\n"
     } else if stderr.contains("E155007") {
         "当前项目不是 SVN 工作副本，请打开已检出的项目目录。\n"
+    } else if stderr.contains("E000022") && (stderr.contains("UTF-8") || stderr.contains("convert"))
+    {
+        "SVN 字符编码转换失败。请让 OpenIDEA/SVN 使用 UTF-8 启动环境后重试；当前插件接口不能覆盖已存在的环境变量。\n"
     } else {
         "SVN 操作失败：\n"
     };
@@ -35,11 +38,30 @@ pub fn svn_error(stderr: &str) -> Error {
 /// One-shot reads use the host's bounded output API: structured XML must never
 /// be decoded from the rolling buffer of a streaming process handle.
 pub fn read(project: &Scope, args: &[String]) -> Result<String, Error> {
-    read_result(|| {
-        project
-            .project
-            .run_process("svn", &project.args(args), None)
-    })
+    read_result(|| with_utf8_locale(&project.args(args), |command| run_command(project, command)))
+}
+
+fn run_command(
+    project: &Scope,
+    command: &host::Command,
+) -> Result<openidea_plugin::ProcessOutput, Error> {
+    let output = host::run_command(command, Some(&project.project), None)?;
+    // The native SDK backend is a mock: it prefixes env reflection to stdout.
+    // Remove that reflection only in native builds; shipped Wasm never does so.
+    #[cfg(not(target_arch = "wasm32"))]
+    let output = {
+        let mut output = output;
+        let prefix: String = command
+            .env
+            .iter()
+            .map(|(key, value)| format!("{key}={value}\n"))
+            .collect();
+        if let Some(stdout) = output.stdout.strip_prefix(&prefix) {
+            output.stdout = stdout.to_owned();
+        }
+        output
+    };
+    Ok(output)
 }
 
 fn read_result(
@@ -174,10 +196,35 @@ pub fn local_diff(project: &Scope, path: &str, entries: &[Entry]) -> Result<(), 
             "目录没有文本内容。目录属性变化可在 SVN 输出或终端中查看。",
         ));
     }
+    if entry.kind == "symlink"
+        || project
+            .project
+            .stat(&project.absolute(path))
+            .is_ok_and(|stat| stat.kind == FileKind::Symlink)
+    {
+        return Err(error(
+            "符号链接没有普通文件文本差异；当前接口无法读取链接目标，不能用目标文件内容代替。",
+        ));
+    }
     if entry.status == "external" {
         return Err(error("请将外部工作副本单独作为项目打开。"));
     }
-    let left = if matches!(entry.status.as_str(), "added" | "unversioned" | "ignored") {
+    // The pinned host canonicalizes paths before stat(), hiding real links.
+    // Query SVN's metadata instead of trusting the referent's file kind.
+    if !matches!(entry.status.as_str(), "unversioned" | "ignored") {
+        let mut properties = svn::command("properties", &[path.into()], "", None)?;
+        if matches!(entry.status.as_str(), "deleted" | "missing") {
+            properties.splice(1..1, ["--revision".into(), "BASE".into()]);
+        }
+        if svn::has_special_property(&read(project, &properties)?)? {
+            return Err(error(
+                "SVN 特殊文件/符号链接暂不支持本地文本差异；不能用目标文件内容代替。",
+            ));
+        }
+    }
+    let left = if matches!(entry.status.as_str(), "unversioned" | "ignored")
+        || entry.status == "added" && !entry.copied
+    {
         String::new()
     } else {
         svn::text_content(
@@ -208,7 +255,9 @@ pub fn local_diff(project: &Scope, path: &str, entries: &[Entry]) -> Result<(), 
             left,
             right,
             left_label: Some(
-                if entry.status == "added" {
+                if matches!(entry.status.as_str(), "unversioned" | "ignored") {
+                    "无版本记录（空）"
+                } else if entry.status == "added" && !entry.copied {
                     "新增文件"
                 } else {
                     "BASE"
@@ -216,7 +265,9 @@ pub fn local_diff(project: &Scope, path: &str, entries: &[Entry]) -> Result<(), 
                 .into(),
             ),
             right_label: Some(
-                if project.direct {
+                if matches!(entry.status.as_str(), "unversioned" | "ignored") {
+                    "本地内容预览"
+                } else if project.direct {
                     "本地（含未保存修改）"
                 } else {
                     "本地（已保存）"
@@ -333,13 +384,13 @@ pub fn history_diff(
     )
 }
 
-fn run_with_diff_locale(
+pub fn with_utf8_locale<T>(
     args: &[String],
-    mut spawn: impl FnMut(&host::Command) -> Result<openidea_plugin::ProcessOutput, Error>,
-) -> Result<openidea_plugin::ProcessOutput, Error> {
+    mut spawn: impl FnMut(&host::Command) -> Result<T, Error>,
+) -> Result<T, Error> {
     // GUI processes can inherit Chinese LC_MESSAGES with an ASCII LC_CTYPE.
     // The localized diff labels then fail before SVN emits any content. Keep
-    // only this machine-read diff in a UTF-8, untranslated process environment.
+    // SVN reads and writes in a UTF-8, untranslated process environment.
     let mut command = host::Command::new("svn")
         .args(args)
         .env("LC_ALL", "C.UTF-8")
@@ -384,11 +435,7 @@ fn saved_content(project: &Scope, path: &str) -> Result<String, Error> {
         "--new".into(),
         format!("{}@", project.absolute(path)),
     ];
-    let patch = read_result(|| {
-        run_with_diff_locale(&args, |command| {
-            host::run_command(command, Some(&project.project), None)
-        })
-    })?;
+    let patch = read_result(|| with_utf8_locale(&args, |command| run_command(project, command)))?;
     empty_diff_content(&patch).map_err(error)
 }
 
@@ -436,6 +483,221 @@ fn empty_diff_content(patch: &str) -> Result<String, String> {
         return Err("文件编码不能可靠地显示，请在编辑器中打开检查。".into());
     }
     svn::text_content(text.as_bytes())
+}
+
+#[cfg(test)]
+mod audit_diff_tests {
+    use super::*;
+    use openidea_plugin::{ProcessOutput, mock::MockHost};
+
+    #[test]
+    fn copied_added_files_diff_against_their_source_base() {
+        let host =
+            MockHost::install().with_capabilities(&["project.read", "editor.read", "process:svn"]);
+        host.add_file("/project/copied.js", "source\nlocal edit\n");
+        host.on_process("svn", |args, _| {
+            Ok(ProcessOutput {
+                status: Some(0),
+                stdout: if args[0] == "proplist" {
+                    "<properties><target path=\"copied.js\"/></properties>".into()
+                } else {
+                    "source\n".into()
+                },
+                stderr: String::new(),
+            })
+        });
+        let scope = Scope::new(host.invocation().project().unwrap(), "/project".into());
+        local_diff(
+            &scope,
+            "copied.js",
+            &[Entry {
+                path: "copied.js".into(),
+                status: "added".into(),
+                kind: "file".into(),
+                copied: true,
+                ..Default::default()
+            }],
+        )
+        .unwrap();
+        let diffs = host.opened_diffs();
+        assert_eq!(diffs[0].0.left.as_deref(), Some("source\n"));
+        assert_eq!(diffs[0].0.right.as_deref(), Some("source\nlocal edit\n"));
+    }
+
+    #[test]
+    fn symlink_local_diff_never_displays_the_referent_as_link_content() {
+        let host =
+            MockHost::install().with_capabilities(&["project.read", "editor.read", "process:svn"]);
+        host.add_file("/project/link", "unrelated target file contents");
+        host.on_process("svn", |_, _| {
+            Ok(ProcessOutput {
+                status: Some(0),
+                stdout: "link old-target".into(),
+                stderr: String::new(),
+            })
+        });
+        let scope = Scope::new(host.invocation().project().unwrap(), "/project".into());
+        let result = local_diff(
+            &scope,
+            "link",
+            &[Entry {
+                path: "link".into(),
+                status: "modified".into(),
+                kind: "symlink".into(),
+                ..Default::default()
+            }],
+        );
+        assert!(result.unwrap_err().to_string().contains("符号链接"));
+        assert!(host.opened_diffs().is_empty());
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn tracked_symlinks_are_detected_even_when_the_host_stat_follows_the_link() {
+        use std::{fs, os::unix::fs::symlink, process::Command};
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        assert!(
+            Command::new("svnadmin")
+                .args(["create", "repo"])
+                .current_dir(root)
+                .status()
+                .unwrap()
+                .success()
+        );
+        let run = |cwd: &std::path::Path, args: &[String]| {
+            let out = Command::new("svn")
+                .current_dir(cwd)
+                .args(args)
+                .output()
+                .unwrap();
+            assert!(
+                out.status.success(),
+                "{}",
+                String::from_utf8_lossy(&out.stderr)
+            );
+            String::from_utf8(out.stdout).unwrap()
+        };
+        run(
+            root,
+            &[
+                "co".into(),
+                format!("file://{}/repo", root.display()),
+                "wc".into(),
+            ],
+        );
+        let wc = root.join("wc");
+        fs::write(wc.join("a.txt"), "base file").unwrap();
+        fs::write(wc.join("b.txt"), "REFERENT_CONTENT_B").unwrap();
+        symlink("a.txt", wc.join("link")).unwrap();
+        run(
+            &wc,
+            &["add".into(), "a.txt".into(), "b.txt".into(), "link".into()],
+        );
+        run(
+            &wc,
+            &svn::command(
+                "commit",
+                &["a.txt".into(), "b.txt".into(), "link".into()],
+                "initial",
+                None,
+            )
+            .unwrap(),
+        );
+        fs::remove_file(wc.join("link")).unwrap();
+        symlink("b.txt", wc.join("link")).unwrap();
+        let host =
+            MockHost::install().with_capabilities(&["project.read", "editor.read", "process:svn"]);
+        host.set_project_root(wc.to_str());
+        host.add_file(wc.join("link").to_str().unwrap(), "REFERENT_CONTENT_B");
+        let cwd = wc.clone();
+        host.on_process("svn", move |args, _| {
+            let out = Command::new("svn")
+                .current_dir(&cwd)
+                .args(args)
+                .output()
+                .unwrap();
+            Ok(ProcessOutput {
+                status: out.status.code(),
+                stdout: String::from_utf8(out.stdout).unwrap(),
+                stderr: String::from_utf8_lossy(&out.stderr).into_owned(),
+            })
+        });
+        let scope = Scope::new(
+            host.invocation().project().unwrap(),
+            wc.to_str().unwrap().into(),
+        );
+        let result = local_diff(
+            &scope,
+            "link",
+            &[Entry {
+                path: "link".into(),
+                status: "modified".into(),
+                kind: "file".into(),
+                ..Default::default()
+            }],
+        );
+        assert!(result.unwrap_err().to_string().contains("符号链接"));
+        assert!(host.opened_diffs().is_empty());
+        // Normal property-free and deleted files still have usable BASE diffs.
+        fs::write(wc.join("b.txt"), "edited").unwrap();
+        host.add_file(wc.join("b.txt").to_str().unwrap(), "edited");
+        local_diff(
+            &scope,
+            "b.txt",
+            &[Entry {
+                path: "b.txt".into(),
+                status: "modified".into(),
+                kind: "file".into(),
+                ..Default::default()
+            }],
+        )
+        .unwrap();
+        run(&wc, &["delete".into(), "a.txt".into()]);
+        local_diff(
+            &scope,
+            "a.txt",
+            &[Entry {
+                path: "a.txt".into(),
+                status: "deleted".into(),
+                kind: "file".into(),
+                ..Default::default()
+            }],
+        )
+        .unwrap();
+        let diffs = host.opened_diffs();
+        assert_eq!(diffs[0].0.left.as_deref(), Some("REFERENT_CONTENT_B"));
+        assert_eq!(diffs[0].0.right.as_deref(), Some("edited"));
+        assert_eq!(diffs[1].0.left.as_deref(), Some("base file"));
+        assert_eq!(diffs[1].0.right.as_deref(), Some(""));
+    }
+
+    #[test]
+    fn ordinary_reads_use_the_same_utf8_process_environment_as_attached_diffs() {
+        let host = MockHost::install().with_capabilities(&["project.read", "process:svn"]);
+        host.on_process("svn", |_, _| {
+            Ok(ProcessOutput {
+                status: Some(0),
+                stdout: "LC_ALL=C.UTF-8\nLANGUAGE=C\n真实文件内容\n".into(),
+                stderr: String::new(),
+            })
+        });
+        let scope = Scope::new(host.invocation().project().unwrap(), "/project".into());
+        let value = read(
+            &scope,
+            &svn::command("cat-base", &["中文.txt".into()], "", None).unwrap(),
+        )
+        .unwrap();
+        assert!(
+            host.process_runs()[0]
+                .env
+                .contains(&("LC_ALL".into(), "C.UTF-8".into()))
+        );
+        assert_eq!(
+            value, "LC_ALL=C.UTF-8\nLANGUAGE=C\n真实文件内容\n",
+            "real file content resembling environment text must remain intact"
+        );
+    }
 }
 
 #[cfg(test)]
@@ -572,7 +834,7 @@ mod attached_tests {
         .into_iter()
         .map(str::to_owned)
         .collect();
-        let output = run_with_diff_locale(&args, |cmd| {
+        let output = with_utf8_locale(&args, |cmd| {
             let mut process = std::process::Command::new("svn");
             for (key, _) in std::env::vars_os() {
                 if key
@@ -606,7 +868,7 @@ mod attached_tests {
     #[test]
     fn inherited_locale_conflicts_are_removed_before_starting_diff() {
         let mut attempts = 0;
-        let output = run_with_diff_locale(&["diff".into()], |cmd| {
+        let output = with_utf8_locale(&["diff".into()], |cmd| {
             attempts += 1;
             if let Some((key, _)) = cmd.env.first() {
                 return Err(Error::Invalid(format!(
@@ -627,7 +889,7 @@ mod attached_tests {
     #[test]
     fn completed_or_denied_diff_is_never_retried() {
         let mut attempts = 0;
-        let output = run_with_diff_locale(&["diff".into()], |_| {
+        let output = with_utf8_locale(&["diff".into()], |_| {
             attempts += 1;
             Ok(openidea_plugin::ProcessOutput {
                 status: Some(1),
@@ -638,7 +900,7 @@ mod attached_tests {
         .unwrap();
         assert_eq!(output.status, Some(1));
         assert_eq!(attempts, 1);
-        let result = run_with_diff_locale(&["diff".into()], |_| {
+        let result = with_utf8_locale(&["diff".into()], |_| {
             attempts += 1;
             Err::<openidea_plugin::ProcessOutput, _>(Error::Invalid(
                 "not an environment collision".into(),
