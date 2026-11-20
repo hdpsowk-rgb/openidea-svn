@@ -1,0 +1,26 @@
+name: Publish signed SVN release
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/publish-release.yml
+permissions:
+  contents: write
+jobs:
+  publish:
+    if: github.repository == 'hdpsowk-rgb/openidea-svn'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify and publish signed 0.1.5 package
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          asset=".release-upload/hdpsowk-rgb.svn-0.1.5.oiplugin"
+          echo "11781067dde1cee634edb12968900597091b0aa71998df6656c0c2f5fcf67657  $asset" | sha256sum --check
+          if gh release view v0.1.5 >/dev/null 2>&1; then
+            echo "Release v0.1.5 already exists; refusing to replace its assets."
+            exit 1
+          fi
+          gh release create v0.1.5 "$asset" --target 2f1150321aacc67a02ba80ac40f4a582c9423469 --title "SVN 0.1.5 for OpenIDEA" --notes-file .release-upload/notes.md
