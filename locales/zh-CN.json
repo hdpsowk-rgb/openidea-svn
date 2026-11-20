@@ -1,0 +1,10 @@
+{
+  "SVN: Open Tool Window": "SVN：打开工具窗口",
+  "SVN: Refresh Changes": "SVN：刷新变更",
+  "SVN: Show Diff": "SVN：查看差异",
+  "SVN: Commit Selected Files": "SVN：提交所选文件",
+  "SVN: Update Project": "SVN：更新项目",
+  "SVN: Show Log": "SVN：查看日志",
+  "SVN: Add to Version Control": "SVN：添加到版本控制",
+  "SVN: Revert Selected Files": "SVN：还原所选文件"
+}

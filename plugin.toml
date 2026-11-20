@@ -1,0 +1,122 @@
+id = "hdpsowk-rgb.svn"
+name = "SVN"
+version = "0.1.3"
+description = "SVN working copies, selected commits, native diffs and history inside OpenIDEA."
+authors = ["hdpsowk-rgb"]
+homepage = "https://github.com/hdpsowk-rgb/openidea-svn"
+license = "MIT"
+categories = ["vcs"]
+icon = "icon.svg"
+engines.openidea = "^1.10"
+wasm = "dist/plugin.wasm"
+activation = ["on-schedule:60", "on-view:svn", "on-command:open", "on-command:refresh", "on-command:diff", "on-command:commit", "on-command:update", "on-command:log", "on-command:add", "on-command:revert"]
+
+[capabilities]
+required = ["project.read", "editor.read", "storage", "events", "process:svn"]
+
+[[contributes.views]]
+id = "svn"
+title = "SVN"
+icon = "icon.svg"
+location = "bottom"
+web = "web/index.html"
+header = "none"
+
+[[contributes.commands]]
+id = "open"
+title = "SVN: Open Tool Window"
+category = "SVN"
+
+[[contributes.commands]]
+id = "refresh"
+title = "SVN: Refresh Changes"
+category = "SVN"
+
+[[contributes.commands]]
+id = "diff"
+title = "SVN: Show Diff"
+category = "SVN"
+
+[[contributes.commands]]
+id = "commit"
+title = "SVN: Commit Selected Files"
+category = "SVN"
+
+[[contributes.commands]]
+id = "update"
+title = "SVN: Update Project"
+category = "SVN"
+
+[[contributes.commands]]
+id = "log"
+title = "SVN: Show Log"
+category = "SVN"
+
+[[contributes.commands]]
+id = "add"
+title = "SVN: Add to Version Control"
+category = "SVN"
+
+[[contributes.commands]]
+id = "revert"
+title = "SVN: Revert Selected Files"
+category = "SVN"
+
+[[contributes.menus]]
+menu = "tools"
+command = "open"
+
+[[contributes.menus]]
+menu = "projectView.context"
+command = "diff"
+submenu = "SVN"
+
+[[contributes.menus]]
+menu = "projectView.context"
+command = "commit"
+submenu = "SVN"
+
+[[contributes.menus]]
+menu = "projectView.context"
+command = "update"
+submenu = "SVN"
+
+[[contributes.menus]]
+menu = "projectView.context"
+command = "log"
+submenu = "SVN"
+
+[[contributes.menus]]
+menu = "projectView.context"
+command = "add"
+submenu = "SVN"
+
+[[contributes.menus]]
+menu = "projectView.context"
+command = "revert"
+submenu = "SVN"
+
+[[contributes.menus]]
+menu = "editor.context"
+command = "diff"
+submenu = "SVN"
+
+[[contributes.menus]]
+menu = "editor.context"
+command = "commit"
+submenu = "SVN"
+
+[[contributes.menus]]
+menu = "editor.context"
+command = "log"
+submenu = "SVN"
+
+[[contributes.menus]]
+menu = "editorTab.context"
+command = "diff"
+submenu = "SVN"
+
+[[contributes.menus]]
+menu = "editorTab.context"
+command = "commit"
+submenu = "SVN"

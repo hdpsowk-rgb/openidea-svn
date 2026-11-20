@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SVN</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main>
+    <header>
+      <div class="heading"><span class="svn-mark" aria-hidden="true">S</span><strong>SVN</strong><select id="project-root" aria-label="SVN 工作目录" title="选择工作区目录"><option value="">正在连接…</option></select><span id="repository" class="muted truncate">正在连接项目…</span></div>
+      <nav aria-label="SVN 工具栏">
+        <button id="refresh" title="刷新工作副本">↻ 刷新</button>
+        <button id="update" data-write title="更新当前项目">↓ 更新</button>
+        <button id="cleanup" data-write title="清理工作副本管理锁">清理</button>
+        <button id="authenticate" title="在 IDE 终端中完成 SVN 认证">认证</button>
+        <button id="cancel" class="danger hidden">■ 取消操作</button>
+      </nav>
+      <div class="refresh-settings" aria-label="自动刷新设置">
+        <label title="仅在面板可见且空闲时按间隔读取状态"><input id="auto-refresh" type="checkbox">自动刷新</label>
+        <label for="refresh-interval">间隔</label><input id="refresh-interval" type="number" min="5" max="3600" step="1" value="30" aria-label="自动刷新间隔（秒）" disabled><span>秒</span>
+      </div>
+    </header>
+    <div id="notice" class="notice hidden" role="alert"></div>
+    <div class="tabs" role="tablist" aria-label="SVN 页面">
+      <button role="tab" aria-selected="true" aria-controls="changes-page" id="changes-tab" data-tab="changes">本地变更 <span id="change-count" class="count">0</span></button>
+      <button role="tab" aria-selected="false" aria-controls="history-page" id="history-tab" data-tab="history">提交日志</button>
+      <button role="tab" aria-selected="false" aria-controls="output-page" id="output-tab" data-tab="output">操作输出</button>
+    </div>
+    <section id="changes-page" role="tabpanel" aria-labelledby="changes-tab" class="page changes-layout">
+      <div class="changes">
+        <div class="filter-row"><input id="filter" type="search" placeholder="按路径筛选…" aria-label="筛选变更路径"><label class="check-all"><input id="check-all" type="checkbox">全选可提交项</label></div>
+        <div class="file-toolbar" aria-label="文件操作">
+          <button id="diff">差异</button><button id="open">打开</button><button id="add" data-write>添加</button><button id="delete" data-write>删除</button><button id="revert" data-write>还原</button>
+          <select id="resolve" aria-label="解决选中文件的冲突" data-write><option value="">解决冲突…</option value="mine-full">使用我的版本</option><option value="theirs-full">使用仓库版本</option><option value="working">标记已解决</option></select>
+        </div>
+        <div id="files" class="files" aria-label="变更文件列表"></div>
+        <div id="empty" class="empty hidden"><span class="empty-mark">✓</span><strong>工作副本没有本地变更</strong><span class="muted">保存文件后点击刷新；也可启用自动刷新。</span></div>
+      </div>
+      <aside class="commit">
+        <div class="section-title">提交变更 <span id="selected-count" class="count">0</span></div>
+        <p class="muted small">勾选文件后提交。新文件请先添加到版本控制。</p>
+        <label for="message" class="small">提交说明</label>
+        <textarea id="message" placeholder="描述本次修改…" spellcheck="false"></textarea>
+        <div id="selection-summary" class="selection-summary muted">尚未选择文件</div>
+        <button id="commit" class="primary" data-write disabled>提交所选文件</button>
+        <span class="muted small">⌘ / Ctrl + Enter 提交 · 双击文件查看差异</span>
+      </aside>
+    </section>
+    <section id="history-page" role="tabpanel" aria-labelledby="history-tab" class="page hidden">
+      <div class="history-tools"><button id="reload-log">刷新日志</button><span id="history-scope" class="muted small truncate">当前项目</span><button id="project-log" class="hidden">项目日志</button></div>
+      <div class="history-layout"><div id="logs" class="logs"></div><div id="log-detail" class="log-detail"><div class="empty muted">选择一条提交记录</div></div></div>
+      <button id="more-log" class="more hidden">加载更早的提交</button>
+    </section>
+    <section id="output-page" role="tabpanel" aria-labelledby="output-tab" class="page hidden">
+      <div class="history-tools"><span class="muted small">当前窗口的 SVN 操作记录</span><button id="clear-output">清空</button></div>
+      <pre id="output" tabindex="0" aria-label="SVN 操作输出"></pre>
+    </section>
+    <footer><span id="status" role="status">正在初始化…</span><span id="root" class="muted truncate"></span></footer>
+  </main>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

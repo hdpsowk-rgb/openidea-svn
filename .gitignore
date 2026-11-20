@@ -1,0 +1,9 @@
+/target/
+/dist/
+/release/
+/.superpowers/
+.DS_Store
+*.log
+
+*.key
+*.pem
