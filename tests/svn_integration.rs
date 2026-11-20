@@ -112,6 +112,63 @@ fn raw(cwd: &Path, args: &[&str]) -> String {
 }
 
 #[test]
+fn chinese_commit_messages_are_utf8_despite_native_locale_and_log_encoding_config() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    run(root, "svnadmin", &["create".into(), "repo".into()]);
+    let url = format!("file://{}", root.join("repo").display());
+    raw(root, &["checkout", &url, "wc"]);
+    let wc = root.join("wc");
+    fs::write(wc.join("a.txt"), "initial\n").unwrap();
+    raw(&wc, &["add", "a.txt"]);
+    let config = root.join("config");
+    fs::create_dir(&config).unwrap();
+    let message = "前端\n修复充值、提现与配置。Emoji 🙂\n引号：\" ' & < > @ % -- 不是参数";
+    let mut scenarios = vec![
+        ("legacy log-encoding config", "C", "ISO-8859-1"),
+        ("ASCII GUI locale", "C", ""),
+    ];
+    if cfg!(target_os = "macos") {
+        scenarios.push(("Latin-1 GUI locale", "en_US.ISO8859-1", ""));
+    }
+    for (index, (name, locale, encoding)) in scenarios.into_iter().enumerate() {
+        fs::write(
+            config.join("config"),
+            format!("[miscellany]\nlog-encoding = {encoding}\n"),
+        )
+        .unwrap();
+        fs::write(wc.join("a.txt"), format!("change {index}\n")).unwrap();
+        let mut args = svn::command("commit", &["a.txt".into()], message, None).unwrap();
+        args.splice(
+            1..1,
+            ["--config-dir".into(), config.to_str().unwrap().into()],
+        );
+        let output = Command::new("svn")
+            .current_dir(&wc)
+            .args(&args)
+            .env("LC_ALL", locale)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{name}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        // Inspect the actual revision property, not just the panel's input or output.
+        let logs =
+            svn::parse_log(&raw(&wc, &["log", "--xml", "-r", &(index + 1).to_string()])).unwrap();
+        assert_eq!(
+            logs[0].message, message,
+            "{name}: repository log text was corrupted"
+        );
+        assert_eq!(
+            raw(root, &["cat", &format!("{url}/a.txt")]),
+            format!("change {index}\n")
+        );
+    }
+}
+
+#[test]
 fn real_repository_selected_commit_update_revert_and_history() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();

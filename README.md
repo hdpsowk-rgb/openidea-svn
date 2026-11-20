@@ -7,12 +7,14 @@
 ## 安装
 
 1. 确认本机已有 `svn` 命令；Windows 需要命令行客户端 `svn.exe`。
-2. 下载 [GitHub Releases](https://github.com/hdpsowk-rgb/openidea-svn/releases) 中的 `hdpsowk-rgb.svn-0.1.8.oiplugin`。
+2. 下载 [GitHub Releases](https://github.com/hdpsowk-rgb/openidea-svn/releases) 中的 `hdpsowk-rgb.svn-0.1.9.oiplugin`。
 3. OpenIDEA → **Settings → Plugins → 齿轮 → Install Plugin from Package File…**，选择 `.oiplugin`，按 IDE 提示安装。
 4. 允许插件运行 `svn`。如果没有自动找到它，在该插件的 Permissions → `process:svn` → **Choose executable…** 中选择实际可执行文件。macOS Homebrew 常见位置为 `/opt/homebrew/bin/svn`。
 5. 打开已有 SVN 工作副本，用 **Find Action（⌘⇧A / Ctrl+Shift+A）** 搜索 **SVN: Open Tool Window**；也可以从 Tools 菜单打开。
 
 ZIP 与 `.oiplugin` 内容相同。也可解压 ZIP，使用 **Install Plugin from Disk…** 选择包含 `plugin.toml` 的目录。普通 IntelliJ 插件包不适用于 OpenIDEA。
+
+0.1.9 修复中文提交说明乱码：提交时明确指定 UTF-8，避免 GUI 系统区域编码或 SVN `log-encoding` 配置将中文、多行说明和 emoji 按其他编码写入仓库。已写入仓库的乱码说明不会自动修复，需要原始说明另行修正。
 
 0.1.8 修复复制分支后查看提交日志差异时的 W160013/E200009：目录复制中的文件修改、替换和删除按复制来源及版本对比，复制新增文件也保留来源内容；左侧标题标明来源路径和版本。普通替换仍与原目标的上一版本对比。
 

@@ -385,7 +385,16 @@ pub fn command(
         "revert-tree" => vec!["revert", "--depth", "infinity"],
         "update" => vec!["update", "--ignore-externals"],
         "cleanup" => vec!["cleanup"],
-        "commit" => vec!["commit", "--depth", "empty", "--message"],
+        // Bridge/request strings are UTF-8. Never let SVN reinterpret the log
+        // message using a GUI locale or the user's legacy log-encoding config.
+        "commit" => vec![
+            "commit",
+            "--depth",
+            "empty",
+            "--encoding",
+            "UTF-8",
+            "--message",
+        ],
         "cat-base" => vec!["cat", "--revision", "BASE"],
         "cat-revision" => vec!["cat", "--revision"],
         "resolve-mine" => vec!["resolve", "--accept", "mine-full", "--depth", "empty"],
