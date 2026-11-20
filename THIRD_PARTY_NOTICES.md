@@ -25,7 +25,7 @@ unmodified icons are recorded in `assets/file-icons/PROVENANCE.json`.
 The twelve semantic folder variants modify the upstream folder silhouette with
 custom colors/emblems and are marked in each SVG. Composer artwork is original
 SVN plugin artwork under MIT. `tools/build-file-icons.py` embeds these SVGs in
-`web/file-icons.css` as local data URLs and adapts three neutral icons for dark
+`web/file-icons.css` as local data URLs and adapts two neutral icons for dark
 backgrounds. No external icon font, CDN, file content or network access is used.
 These bundled icons do not follow the IDE's selected file icon theme.
 
