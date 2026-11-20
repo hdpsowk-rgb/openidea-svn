@@ -23,4 +23,4 @@ jobs:
             echo "Release v0.1.6 already exists; refusing to replace its assets."
             exit 1
           fi
-          gh release create v0.1.6 "$asset" --target 3f67f2df09fe8cc9e65b0fcb8f06a4bb84eab35e --title "SVN 0.1.6 for OpenIDEA" --notes-file .release-upload/notes.md
+          gh release create v0.1.6 "$asset" --target "$GITHUB_SHA" --title "SVN 0.1.6 for OpenIDEA" --notes-file .release-upload/notes.md
