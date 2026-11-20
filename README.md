@@ -7,12 +7,14 @@
 ## 安装
 
 1. 确认本机已有 `svn` 命令；Windows 需要命令行客户端 `svn.exe`。
-2. 下载 [GitHub Releases](https://github.com/hdpsowk-rgb/openidea-svn/releases) 中的 `hdpsowk-rgb.svn-0.1.7.oiplugin`。
+2. 下载 [GitHub Releases](https://github.com/hdpsowk-rgb/openidea-svn/releases) 中的 `hdpsowk-rgb.svn-0.1.8.oiplugin`。
 3. OpenIDEA → **Settings → Plugins → 齿轮 → Install Plugin from Package File…**，选择 `.oiplugin`，按 IDE 提示安装。
 4. 允许插件运行 `svn`。如果没有自动找到它，在该插件的 Permissions → `process:svn` → **Choose executable…** 中选择实际可执行文件。macOS Homebrew 常见位置为 `/opt/homebrew/bin/svn`。
 5. 打开已有 SVN 工作副本，用 **Find Action（⌘⇧A / Ctrl+Shift+A）** 搜索 **SVN: Open Tool Window**；也可以从 Tools 菜单打开。
 
 ZIP 与 `.oiplugin` 内容相同。也可解压 ZIP，使用 **Install Plugin from Disk…** 选择包含 `plugin.toml` 的目录。普通 IntelliJ 插件包不适用于 OpenIDEA。
+
+0.1.8 修复复制分支后查看提交日志差异时的 W160013/E200009：目录复制中的文件修改、替换和删除按复制来源及版本对比，复制新增文件也保留来源内容；左侧标题标明来源路径和版本。普通替换仍与原目标的上一版本对比。
 
 0.1.7 新增 40 种文件图标与 14 种目录图标，覆盖常用语言、配置、资源、测试和项目文件。图标随插件离线打包，不读取文件内容，不增加 SVN 请求；与 IDE 文件图标主题独立。保留目录双击、忽略/取消忽略和默认关闭的自动刷新。
 
@@ -29,7 +31,7 @@ ZIP 与 `.oiplugin` 内容相同。也可解压 ZIP，使用 **Install Plugin fr
 - **删除 / 还原**：点中目标后操作，丢弃修改前有确认。点击目录行再还原会确认整个目录下的全部已跟踪修改；勾选文件后还原只处理选中路径。新增路径会取消版本控制。复制/替换目录暂不直接还原；阻塞项、已删除但在磁盘上仍有内容的路径也会拦截，避免 SVN 覆盖本地内容。无法确认附加目录中删除路径的磁盘状态时，需先备份并在 IDE 终端明确处理。删除目录会展开其后代供提交选择；提交目录删除必须同时勾选全部后代。
 - **更新 / 清理**：作用于选中工作目录；更新忽略外部工作副本。存在未保存修改时会阻止更新。清理用于 SVN 管理锁，不清除未跟踪文件。
 - **冲突**：点击冲突文件，在下拉框选择我的版本、仓库版本或标记已解决。
-- **日志**：加载提交记录及改动路径，支持继续加载更早版本；双击文件打开该版本前后的原生差异。
+- **日志**：加载提交记录及改动路径，支持继续加载更早版本；双击文件打开原生差异；复制新增文件及复制目录内的改动按复制来源对比，左侧显示来源路径与版本。
 - **操作输出**：更新、提交及文件写操作显示进度和输出，可从面板或 IDE 后台任务取消。取消之后仍需检查工作副本，已经完成的修改不会自动回滚。
 
 项目树、编辑器和文件标签页提供 SVN 右键菜单，动作也可在 IDE 的 Keymap 中绑定快捷键。插件不预占 Git 快捷键。

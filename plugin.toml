@@ -1,6 +1,6 @@
 id = "hdpsowk-rgb.svn"
 name = "SVN"
-version = "0.1.7"
+version = "0.1.8"
 description = "SVN working copies, selected commits, native diffs and history inside OpenIDEA."
 authors = ["hdpsowk-rgb"]
 homepage = "https://github.com/hdpsowk-rgb/openidea-svn"

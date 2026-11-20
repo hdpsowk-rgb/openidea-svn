@@ -276,10 +276,41 @@ pub fn history_diff(
         ];
         svn::text_content(read(project, &args)?.as_bytes()).map_err(error)
     }
-    let left = if change.action == "A" || revision == 0 {
-        String::new()
+    // Children changed within a directory copy have a preimage in the copy
+    // source, not necessarily at the destination in r-1. A nearer add/replace
+    // resets that ancestry, including a plain add with no copy source.
+    let copy_source = |node: &svn::LogPath, suffix: &str| -> Result<_, Error> {
+        match (&node.copy_from_path, node.copy_from_revision) {
+            (Some(source), Some(rev)) if rev < revision => Ok(Some((
+                format!("{}{suffix}", source.trim_end_matches('/')),
+                rev,
+            ))),
+            (None, None) => Ok(None),
+            _ => Err(error("历史记录的复制来源不完整或版本无效，请刷新日志。")),
+        }
+    };
+    let base = if revision == 0 {
+        None
+    } else if change.action == "A" {
+        copy_source(change, "")?
+    } else if let Some(parent) = log
+        .paths
+        .iter()
+        .filter(|node| {
+            matches!(node.action.as_str(), "A" | "R")
+                && path
+                    .strip_prefix(&node.path)
+                    .is_some_and(|suffix| suffix.starts_with('/'))
+        })
+        .max_by_key(|node| node.path.len())
+    {
+        copy_source(parent, &path[parent.path.len()..])?
     } else {
-        cat(project, &info.root_url, path, revision - 1)?
+        Some((path.to_owned(), revision - 1))
+    };
+    let left = match &base {
+        Some((old_path, old_rev)) => cat(project, &info.root_url, old_path, *old_rev)?,
+        None => String::new(),
     };
     let right = if change.action == "D" {
         String::new()
@@ -290,7 +321,11 @@ pub fn history_diff(
         &ContentDiff {
             left,
             right,
-            left_label: Some(format!("r{}", revision.saturating_sub(1))),
+            left_label: Some(match &base {
+                Some((old_path, old_rev)) if old_path != path => format!("r{old_rev} · {old_path}"),
+                Some((_, old_rev)) => format!("r{old_rev}"),
+                None => "新增前（空）".into(),
+            }),
             right_label: Some(format!("r{revision}")),
             title: Some(format!("SVN r{revision} · {path}")),
         },

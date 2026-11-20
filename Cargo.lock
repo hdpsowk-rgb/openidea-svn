@@ -156,7 +156,7 @@ dependencies = [
 
 [[package]]
 name = "openidea-svn"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "openidea-plugin",
  "quick-xml",
