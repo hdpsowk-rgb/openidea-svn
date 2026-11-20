@@ -61,11 +61,18 @@ fn read_result(
 }
 
 pub fn refresh(project: &Scope) -> Result<(Info, Vec<Entry>), Error> {
+    refresh_with_ignored(project, false)
+}
+pub fn refresh_with_ignored(
+    project: &Scope,
+    include_ignored: bool,
+) -> Result<(Info, Vec<Entry>), Error> {
     let info = svn::parse_info(&read(project, &svn::command("info", &[], "", None)?)?)?;
-    let mut entries = svn::parse_status_at(
-        &read(project, &svn::command("status", &[], "", None)?)?,
-        Some(&project.root),
-    )?;
+    let mut status = svn::command("status", &[], "", None)?;
+    if include_ignored {
+        status.insert(1, "--no-ignore".into());
+    }
+    let mut entries = svn::parse_status_at(&read(project, &status)?, Some(&project.root))?;
     let mut metadata = Vec::new();
     let mut shallow = Vec::new();
     for entry in &mut entries {
@@ -80,6 +87,7 @@ pub fn refresh(project: &Scope) -> Result<(Info, Vec<Entry>), Error> {
             }
             .into();
             if entry.kind == "dir"
+                && entry.path != "."
                 && project
                     .project
                     .exists(&project.absolute(&format!("{}/.svn", entry.path)))
@@ -90,7 +98,7 @@ pub fn refresh(project: &Scope) -> Result<(Info, Vec<Entry>), Error> {
         }
         if matches!(entry.status.as_str(), "deleted" | "replaced" | "missing") {
             metadata.push(entry.path.clone());
-        } else if !project.direct && entry.status != "unversioned" {
+        } else if !project.direct && !matches!(entry.status.as_str(), "unversioned" | "ignored") {
             shallow.push(entry.path.clone());
         }
     }
@@ -121,6 +129,7 @@ fn decorate(project: &Scope, entries: &[Entry]) {
                 "deleted" | "missing" => ("D", "removed"),
                 "conflicted" => ("C", "error"),
                 "unversioned" => ("?", "muted"),
+                "ignored" => ("I", "muted"),
                 "external" => ("X", "muted"),
                 "normal" => ("P", "modified"),
                 _ => ("M", "modified"),
@@ -168,7 +177,7 @@ pub fn local_diff(project: &Scope, path: &str, entries: &[Entry]) -> Result<(), 
     if entry.status == "external" {
         return Err(error("请将外部工作副本单独作为项目打开。"));
     }
-    let left = if matches!(entry.status.as_str(), "added" | "unversioned") {
+    let left = if matches!(entry.status.as_str(), "added" | "unversioned" | "ignored") {
         String::new()
     } else {
         svn::text_content(
@@ -622,4 +631,360 @@ mod attached_tests {
         assert!(runs[0].env.contains(&("LC_ALL".into(), "C.UTF-8".into())));
         assert!(runs[0].env.contains(&("LANGUAGE".into(), "C".into())));
     }
+}
+
+/// Prepare one parent-directory property change; writing uses the normal job/lock.
+pub fn prepare_ignore(
+    project: &Scope,
+    paths: &[String],
+    remove: bool,
+    client: &str,
+) -> Result<Option<Vec<String>>, Error> {
+    use crate::ignore_rules as rules;
+    if paths.len() != 1 {
+        return Err(error(
+            "请点击一个未跟踪或已忽略的文件/目录，再执行忽略操作。",
+        ));
+    }
+    let path = &paths[0];
+    svn::target(path)?;
+    let expected = if remove { "ignored" } else { "unversioned" };
+    let (_, entries) = refresh_with_ignored(project, remove)?;
+    if !entries
+        .iter()
+        .any(|e| e.path == *path && e.status == expected)
+    {
+        return Err(error(if remove {
+            "仅能取消已忽略项目的忽略规则，请开启「显示已忽略」并选择目标。"
+        } else {
+            "仅能忽略未跟踪的文件或目录；已跟踪文件请先明确处理版本控制状态。"
+        }));
+    }
+    let (parent, name) = path.rsplit_once('/').unwrap_or((".", path.as_str()));
+    let info = svn::parse_info(&read(
+        project,
+        &svn::command("info", &[parent.into()], "", None)?,
+    )?)?;
+    if info.kind != "dir" {
+        return Err(error("忽略规则只能写入已跟踪的父目录。"));
+    }
+    let args = svn::command("ignore-list", &[parent.into()], "", None)?;
+    let old = rules::parse(&read(project, &args)?)?;
+    let value = if remove {
+        if !rules::matches_any(old.as_deref().unwrap_or(""), name) {
+            return Err(error(
+                "本目录的 svn:ignore 没有匹配此项目的规则。该项可能来自 svn:global-ignores、继承或 SVN 客户端全局配置；本目录的其他规则不会改动。",
+            ));
+        }
+        match rules::update(old.as_deref(), name, true) {
+            Ok(value) if !rules::matches_any(value.as_deref().unwrap_or(""), name) => value,
+            _ => {
+                let Some(edited) = host::input_multiline(
+                    &format!(
+                        "取消忽略 {path}：请删除使该项目匹配的规则。目录 {parent} 的其他规则请保留；删除通配符会影响同目录其他项目。"
+                    ),
+                    old.as_deref(),
+                )?
+                else {
+                    return Ok(None);
+                };
+                rules::validate(&edited)?;
+                if edited == old.as_deref().unwrap_or("") {
+                    return Ok(None);
+                }
+                if rules::matches_any(&edited, name) {
+                    return Err(error(
+                        "修改后的本目录规则仍匹配此项目，请删除实际匹配的规则后重试。",
+                    ));
+                }
+                if edited.is_empty() {
+                    None
+                } else {
+                    Some(edited)
+                }
+            }
+        }
+    } else {
+        rules::update(old.as_deref(), name, false)?
+    };
+    let body = format!(
+        "目标：{path}\n规则目录：{parent}\n\n{}\n\n修改后的 svn:ignore：\n{}",
+        if remove {
+            "只修改本目录的 svn:ignore，不修改或删除本地文件；继承和全局忽略规则仍有效。"
+        } else {
+            "文件保留在本地；忽略规则是父目录的属性变更，可随后提交。"
+        },
+        value
+            .as_deref()
+            .unwrap_or("（删除本目录的 svn:ignore 属性）")
+    );
+    if !host::confirm(
+        if remove {
+            "确认取消忽略"
+        } else {
+            "确认忽略所选项目"
+        },
+        &body,
+    )? {
+        return Ok(None);
+    }
+    if rules::parse(&read(project, &args)?)? != old {
+        return Err(error(
+            "忽略规则在确认期间已变化，请刷新后重试，避免覆盖其他修改。",
+        ));
+    }
+    let (_, latest) = refresh_with_ignored(project, remove)?;
+    if !latest
+        .iter()
+        .any(|e| e.path == *path && e.status == expected)
+    {
+        return Err(error("所选项目的 SVN 状态已变化，请刷新后重试。"));
+    }
+    if rules::parse(&read(project, &args)?)? != old {
+        return Err(error(
+            "忽略规则在确认期间已变化，请刷新后重试，避免覆盖其他修改。",
+        ));
+    }
+    let file = if let Some(value) = value {
+        let file = format!(
+            "{}/svn-ignore-{client}.txt",
+            host::fs::plugin_dir()?.trim_end_matches('/')
+        );
+        host::fs::write_file(&file, &value)?;
+        Some(file)
+    } else {
+        None
+    };
+    Ok(Some(rules::command(parent, file.as_deref())?))
+}
+
+pub fn check_revert_directory(project: &Scope, path: &str) -> Result<(), Error> {
+    svn::target(path)?;
+    let (_, entries) = refresh_with_ignored(project, true)?;
+    svn::validate_revert_tree(&entries, path)?;
+    check_deleted_paths(
+        project,
+        entries
+            .iter()
+            .filter(|e| path == "." || e.path == path || e.path.starts_with(&format!("{path}/"))),
+    )?;
+    if !entries.iter().any(|e| {
+        (path == "." || e.path == path || e.path.starts_with(&format!("{path}/")))
+            && !matches!(e.status.as_str(), "unversioned" | "ignored" | "external")
+    }) {
+        return Err(error("所选目录没有可还原的已跟踪变更，请刷新。"));
+    }
+    if svn::parse_info(&read(
+        project,
+        &svn::command("info", &[path.into()], "", None)?,
+    )?)?
+    .kind
+        != "dir"
+    {
+        return Err(error("目录还原必须选择已跟踪目录。"));
+    }
+    Ok(())
+}
+pub fn selected_revert_paths(
+    project: &Scope,
+    entries: &[Entry],
+    paths: &[String],
+) -> Result<Vec<String>, Error> {
+    let ordered = svn::order_revert(entries, paths).map_err(error)?;
+    check_deleted_paths(project, entries.iter().filter(|e| paths.contains(&e.path)))?;
+
+    for entry in entries.iter().filter(|e| {
+        paths.contains(&e.path) && e.status == "added" && e.kind != "file" && e.kind != "symlink"
+    }) {
+        let xml = read(
+            project,
+            &svn::command("info-tree", std::slice::from_ref(&entry.path), "", None)?,
+        )?;
+        let nodes = svn::info_paths(&xml, &project.root)?;
+        if nodes.iter().any(|path| !paths.contains(path)) {
+            return Err(error(
+                "新增目录含未选中的后代。请选中目录行后执行整个目录还原，或只还原明确勾选的文件。",
+            ));
+        }
+    }
+    Ok(ordered)
+}
+
+#[cfg(test)]
+mod ignore_tests {
+    use super::*;
+    use openidea_plugin::mock::MockHost;
+    use std::{cell::Cell, rc::Rc};
+    fn setup(status: &'static str, properties: impl Fn() -> String + 'static) -> (MockHost, Scope) {
+        let host = MockHost::install().with_capabilities(&[
+            "project.read",
+            "process:svn",
+            "storage",
+            "editor.read",
+        ]);
+        host.on_process("svn",move |args,_|{
+            let stdout=match args[0].as_str(){
+                "status"=>format!("<status><target path=\".\"><entry path=\"nested/cache.tmp\"><wc-status item=\"{status}\" props=\"none\"/></entry></target></status>"),
+                "proplist"=>properties(),
+                _=>"<info><entry path=\".\" kind=\"dir\" revision=\"1\"><url>file:///repo</url><wc-info><wcroot-abspath>/second</wcroot-abspath></wc-info></entry></info>".into(),
+            };Ok(openidea_plugin::ProcessOutput{status:Some(0),stdout,stderr:String::new()})
+        });
+        let scope = Scope::new(host.invocation().project().unwrap(), "/second".into());
+        (host, scope)
+    }
+    fn property(value: &str) -> String {
+        format!(
+            "<properties><target path=\"nested\"><property name=\"svn:ignore\">{value}</property></target></properties>"
+        )
+    }
+    #[test]
+    fn ignore_preparation_preserves_rules_and_rebases_only_the_attached_parent() {
+        let (host, scope) = setup("unversioned", || property("keep\n"));
+        host.answer_next_prompt(Some(&["yes"]));
+        let args = prepare_ignore(&scope, &["nested/cache.tmp".into()], false, "test-client")
+            .unwrap()
+            .unwrap();
+        let file = &args[2];
+        assert_eq!(host::fs::read_file(file).unwrap(), "keep\ncache.tmp\n");
+        let actual = scope.args(&args);
+        assert_eq!(actual.last().unwrap(), "/second/nested@");
+        assert_eq!(&actual[2], file);
+        assert_eq!(actual[0], "propset");
+    }
+    #[test]
+    fn unignore_removes_an_empty_property_and_leaves_global_rules_alone() {
+        let (host, scope) = setup("ignored", || property("cache.tmp\n"));
+        host.answer_next_prompt(Some(&["yes"]));
+        let args = prepare_ignore(&scope, &["nested/cache.tmp".into()], true, "test-client")
+            .unwrap()
+            .unwrap();
+        assert_eq!(args[0], "propdel");
+        assert_eq!(args.last().unwrap(), "nested@");
+        drop(host);
+        let (_host, scope) = setup("ignored", || "<properties/>".into());
+        assert!(
+            prepare_ignore(&scope, &["nested/cache.tmp".into()], true, "test-client")
+                .unwrap_err()
+                .to_string()
+                .contains("全局")
+        );
+    }
+    #[test]
+    fn concurrent_property_changes_are_rejected_after_confirmation() {
+        let reads = Rc::new(Cell::new(0));
+        let seen = reads.clone();
+        let (host, scope) = setup("unversioned", move || {
+            let n = seen.get();
+            seen.set(n + 1);
+            property(if n == 0 { "keep\n" } else { "changed\n" })
+        });
+        host.answer_next_prompt(Some(&["yes"]));
+        assert!(
+            prepare_ignore(&scope, &["nested/cache.tmp".into()], false, "test-client")
+                .unwrap_err()
+                .to_string()
+                .contains("确认期间已变化")
+        );
+        assert_eq!(reads.get(), 2);
+    }
+    #[test]
+    fn wildcard_unignore_is_explicitly_edited_and_confirmed() {
+        let (host, scope) = setup("ignored", || property("*.tmp\nkeep\n"));
+        host.answer_next_prompt(Some(&["keep\n"]));
+        host.answer_next_prompt(Some(&["yes"]));
+        let args = prepare_ignore(&scope, &["nested/cache.tmp".into()], true, "test-client")
+            .unwrap()
+            .unwrap();
+        assert_eq!(host::fs::read_file(&args[2]).unwrap(), "keep\n");
+    }
+
+    #[test]
+    fn inherited_ignore_does_not_edit_an_unrelated_local_rule() {
+        let (_host, scope) = setup("ignored", || property("keep.txt\n"));
+        assert!(
+            prepare_ignore(&scope, &["nested/cache.tmp".into()], true, "test-client")
+                .unwrap_err()
+                .to_string()
+                .contains("全局")
+        );
+    }
+    #[test]
+    fn overlapping_wildcard_still_matching_is_not_called_unignored() {
+        let (host, scope) = setup("ignored", || property("cache.tmp\n*.tmp\n"));
+        host.answer_next_prompt(Some(&["*.tmp\n"]));
+        assert!(
+            prepare_ignore(&scope, &["nested/cache.tmp".into()], true, "test-client")
+                .unwrap_err()
+                .to_string()
+                .contains("仍")
+        );
+    }
+
+    #[test]
+    fn property_change_during_final_status_scan_is_not_overwritten() {
+        let host =
+            MockHost::install().with_capabilities(&["project.read", "process:svn", "storage"]);
+        let scans = Rc::new(Cell::new(0));
+        let seen = scans.clone();
+        host.on_process("svn",move |args,_|{
+            let stdout=match args[0].as_str(){
+                "status"=>{seen.set(seen.get()+1);"<status><target path=\".\"><entry path=\"nested/cache.tmp\"><wc-status item=\"unversioned\" props=\"none\"/></entry></target></status>".into()},
+                "proplist"=>property(if seen.get()<2{"keep\n"}else{"changed\n"}),
+                _=>"<info><entry path=\".\" kind=\"dir\" revision=\"1\"><url>file:///repo</url><wc-info><wcroot-abspath>/second</wcroot-abspath></wc-info></entry></info>".into(),
+            };Ok(openidea_plugin::ProcessOutput{status:Some(0),stdout,stderr:String::new()})
+        });
+        let scope = Scope::new(host.invocation().project().unwrap(), "/second".into());
+        host.answer_next_prompt(Some(&["yes"]));
+        assert!(
+            prepare_ignore(&scope, &["nested/cache.tmp".into()], false, "test-client")
+                .unwrap_err()
+                .to_string()
+                .contains("确认期间已变化")
+        );
+        assert_eq!(scans.get(), 2);
+    }
+}
+
+#[cfg(test)]
+mod revert_review_tests {
+    use super::*;
+    use openidea_plugin::mock::MockHost;
+    #[test]
+    fn deleted_paths_recreated_on_disk_are_not_overwritten() {
+        let host = MockHost::install().with_capabilities(&["project.read", "process:svn"]);
+        host.add_file("dir/file/keep", "untracked");
+        host.add_dir("dir/file");
+        let scope = Scope::new(host.invocation().project().unwrap(), "/project".into());
+        let entries = [Entry {
+            path: "dir/file".into(),
+            status: "deleted".into(),
+            kind: "file".into(),
+            ..Default::default()
+        }];
+        assert!(selected_revert_paths(&scope, &entries, &["dir/file".into()]).is_err());
+    }
+}
+
+fn check_deleted_paths<'a>(
+    project: &Scope,
+    entries: impl Iterator<Item = &'a Entry>,
+) -> Result<(), Error> {
+    for entry in entries.filter(|e| e.status == "deleted") {
+        match project.project.stat(&project.absolute(&entry.path)) {
+            Err(Error::NotFound(_)) => {}
+            Err(e) => {
+                return Err(error(format!(
+                    "无法确认已删除路径 {} 的磁盘状态，请先检查本地内容后在 IDE 终端处理：{e}",
+                    entry.path
+                )));
+            }
+            Ok(_) => {
+                return Err(error(format!(
+                    "已删除路径 {} 在磁盘上仍有本地内容，直接还原可能覆盖它；请先将这些内容移出，再还原。",
+                    entry.path
+                )));
+            }
+        }
+    }
+    Ok(())
 }

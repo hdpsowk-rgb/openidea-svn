@@ -10,6 +10,10 @@ pub struct Entry {
     pub kind: String,
     #[serde(default)]
     pub metadata_complete: bool,
+    #[serde(default)]
+    pub copied: bool,
+    #[serde(default)]
+    pub replaced: bool,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -68,6 +72,8 @@ fn checked_target(path: &str, allow_management: bool) -> Result<String, String> 
 struct StatusXml {
     #[serde(default, rename = "target")]
     targets: Vec<StatusTarget>,
+    #[serde(default, rename = "changelist")]
+    changelists: Vec<StatusTarget>,
 }
 #[derive(Deserialize)]
 struct StatusTarget {
@@ -91,8 +97,13 @@ struct WcStatus {
     tree_conflicted: String,
     #[serde(default, rename = "@file-external")]
     file_external: String,
+    #[serde(default, rename = "@copied")]
+    copied: String,
 }
-fn parse_xml<T: serde::de::DeserializeOwned>(xml: &str, root: &str) -> Result<T, String> {
+pub(crate) fn parse_xml<T: serde::de::DeserializeOwned>(
+    xml: &str,
+    root: &str,
+) -> Result<T, String> {
     if xml.len() > 8 * 1024 * 1024 {
         return Err("SVN XML 超过 8 MiB，请缩小操作范围。".into());
     }
@@ -116,9 +127,15 @@ pub fn parse_status(xml: &str) -> Result<Vec<Entry>, String> {
 pub fn parse_status_at(xml: &str, root: Option<&str>) -> Result<Vec<Entry>, String> {
     let parsed: StatusXml = parse_xml(xml, "status")?;
     let mut entries = Vec::new();
-    for entry in parsed.targets.into_iter().flat_map(|t| t.entries) {
-        let path = relative_xml_path(&entry.path, root, entry.wc.item == "unversioned")?;
-        if entry.wc.item == "unversioned" && management_path(&path) {
+    for entry in parsed
+        .targets
+        .into_iter()
+        .chain(parsed.changelists)
+        .flat_map(|t| t.entries)
+    {
+        let untracked = matches!(entry.wc.item.as_str(), "unversioned" | "ignored");
+        let path = relative_xml_path(&entry.path, root, untracked)?;
+        if untracked && management_path(&path) {
             continue;
         }
         if entry.wc.item == "normal"
@@ -127,6 +144,7 @@ pub fn parse_status_at(xml: &str, root: Option<&str>) -> Result<Vec<Entry>, Stri
         {
             continue;
         }
+        let replaced = entry.wc.item == "replaced";
         entries.push(Entry {
             path,
             status: if entry.wc.file_external == "true" {
@@ -138,6 +156,8 @@ pub fn parse_status_at(xml: &str, root: Option<&str>) -> Result<Vec<Entry>, Stri
             tree_conflicted: entry.wc.tree_conflicted == "true",
             kind: "unknown".into(),
             metadata_complete: false,
+            copied: entry.wc.copied == "true",
+            replaced,
         });
     }
     Ok(entries)
@@ -192,6 +212,60 @@ pub fn parse_info(xml: &str) -> Result<Info, String> {
 
 pub fn enrich_info(entries: &mut Vec<Entry>, xml: &str) -> Result<(), String> {
     enrich_info_at(entries, xml, None)
+}
+pub(crate) fn info_paths(xml: &str, root: &str) -> Result<Vec<String>, String> {
+    let info: InfoXml = parse_xml(xml, "info")?;
+    info.entries
+        .into_iter()
+        .map(|node| relative_xml_path(&node.path, Some(root), false))
+        .collect()
+}
+
+pub fn order_revert(entries: &[Entry], selected: &[String]) -> Result<Vec<String>, String> {
+    let mut paths = selected.to_vec();
+    for path in &paths {
+        let entry = entries
+            .iter()
+            .find(|e| e.path == *path)
+            .ok_or("所选路径已变化，请刷新。")?;
+        validate_revert_node(entry)?;
+        if matches!(
+            entry.status.as_str(),
+            "unversioned" | "ignored" | "external"
+        ) {
+            return Err("不能还原未跟踪、已忽略或外部副本项目。".into());
+        }
+    }
+    let added: Vec<_> = entries
+        .iter()
+        .filter(|e| {
+            e.status == "added"
+                && e.kind != "file"
+                && e.kind != "symlink"
+                && paths.contains(&e.path)
+        })
+        .map(|e| e.path.as_str())
+        .collect();
+    let in_added = |path: &str| {
+        added
+            .iter()
+            .any(|parent| path == *parent || path.starts_with(&format!("{parent}/")))
+    };
+    let depth = |path: &str| path.split('/').count();
+    paths.sort_by(|a, b| {
+        in_added(b)
+            .cmp(&in_added(a))
+            .then_with(|| {
+                if in_added(a) {
+                    depth(b).cmp(&depth(a))
+                } else {
+                    depth(a).cmp(&depth(b))
+                }
+            })
+            .then_with(|| a.cmp(b))
+    });
+    paths.dedup();
+    Ok(paths)
 }
 pub fn enrich_info_at(
     entries: &mut Vec<Entry>,
@@ -301,12 +375,14 @@ pub fn command(
     }
     let mut args: Vec<String> = match action {
         "status" => vec!["status", "--xml", "--ignore-externals"],
+        "ignore-list" => vec!["proplist", "--xml", "--verbose", "--depth", "empty"],
         "info" => vec!["info", "--xml", "--depth", "empty"],
         "info-tree" => vec!["info", "--xml", "--depth", "infinity"],
         "log" => vec!["log", "--xml", "--verbose", "--limit", "50"],
         "add" => vec!["add", "--depth", "empty"],
         "delete" => vec!["delete"],
         "revert" => vec!["revert", "--depth", "empty"],
+        "revert-tree" => vec!["revert", "--depth", "infinity"],
         "update" => vec!["update", "--ignore-externals"],
         "cleanup" => vec!["cleanup"],
         "commit" => vec!["commit", "--depth", "empty", "--message"],
@@ -434,4 +510,31 @@ fn relative_xml_path(
     checked_target(path, allow_management)
         .map_err(|error| format!("SVN 返回的路径 {path:?} 无法归入工作目录 {root:?}：{error}"))?;
     Ok(path.to_owned())
+}
+
+fn validate_revert_node(entry: &Entry) -> Result<(), String> {
+    if entry.status == "obstructed" {
+        return Err(format!(
+            "{} 被其他本地文件/目录阻塞，直接还原可能覆盖其中内容；请先移出阻塞项目。",
+            entry.path
+        ));
+    }
+    if (entry.copied || entry.replaced || entry.status == "replaced")
+        && entry.kind != "file"
+        && entry.kind != "symlink"
+    {
+        return Err(format!(
+            "{} 是复制或替换目录，SVN 还原可能删除其中的本地内容。面板暂不直接还原此类目录；请先备份，再在 IDE 终端中明确处理。",
+            entry.path
+        ));
+    }
+    Ok(())
+}
+pub fn validate_revert_tree(entries: &[Entry], directory: &str) -> Result<(), String> {
+    for entry in entries.iter().filter(|e| {
+        directory == "." || e.path == directory || e.path.starts_with(&format!("{directory}/"))
+    }) {
+        validate_revert_node(entry)?;
+    }
+    Ok(())
 }

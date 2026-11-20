@@ -30,6 +30,7 @@ struct Session {
     generation: u64,
     info: Option<Info>,
     entries: Vec<Entry>,
+    include_ignored: bool,
     logs: Vec<LogEntry>,
     job: Option<Job>,
     draft: String,
@@ -266,11 +267,14 @@ impl SvnPlugin {
                 host::storage::set(&format!("draft:{}:{}", s.root, r.client), &s.draft)?;
             }
             "refresh" => {
-                let (info, entries) = wc::refresh(p)?;
+                let include_ignored = r.include_ignored.unwrap_or(s.include_ignored);
+                let (info, entries) = wc::refresh_with_ignored(p, include_ignored)?;
+                s.include_ignored = include_ignored;
                 s.info = Some(info);
                 s.entries = entries;
                 result["info"] = json!(s.info);
                 result["entries"] = json!(s.entries);
+                result["includeIgnored"] = json!(include_ignored);
             }
             "authenticate" => {
                 host::open_terminal(
@@ -336,17 +340,26 @@ impl SvnPlugin {
             "poll" => {}
             action => {
                 let all = action == "update";
-                wc::dirty(p, &r.paths, all)?;
+                let ignore = matches!(action, "ignore" | "unignore");
+                if !ignore {
+                    wc::dirty(p, &r.paths, all)?;
+                }
                 let mut paths = r.paths.clone();
                 paths.sort();
                 paths.dedup();
-                if action == "commit" {
+                let directory_revert = action == "revert" && r.directory.is_some();
+                if matches!(action, "commit" | "revert") {
                     let (info, entries) = wc::refresh(p)?;
                     s.info = Some(info);
                     s.entries = entries;
-                    svn::validate_commit(&s.entries, &paths)?;
+                    if action == "commit" {
+                        svn::validate_commit(&s.entries, &paths)?;
+                    }
                 }
-                if matches!(action, "add" | "delete" | "revert" | "resolve") {
+                if directory_revert {
+                    wc::check_revert_directory(p, &paths[0])?;
+                }
+                if matches!(action, "add" | "delete" | "revert" | "resolve") && !directory_revert {
                     if paths.is_empty() {
                         return Err(wc::error("请选择操作目标。"));
                     }
@@ -362,12 +375,19 @@ impl SvnPlugin {
                         if action == "add" && entry.status != "unversioned" {
                             return Err(wc::error("仅能添加未跟踪文件。"));
                         }
-                        if action == "revert" && entry.status == "unversioned" {
+                        if action == "revert"
+                            && matches!(entry.status.as_str(), "unversioned" | "ignored")
+                        {
                             return Err(wc::error("未跟踪文件不会通过还原操作删除。"));
                         }
                     }
                 }
-                let command = if action == "resolve" {
+                if action == "revert" && !directory_revert {
+                    paths = wc::selected_revert_paths(p, &s.entries, &paths)?;
+                }
+                let command = if directory_revert {
+                    "revert-tree"
+                } else if action == "resolve" {
                     match r.accept.as_deref() {
                         Some("mine-full") => "resolve-mine",
                         Some("theirs-full") => "resolve-theirs",
@@ -377,13 +397,25 @@ impl SvnPlugin {
                 } else {
                     action
                 };
-                let args = p.args(&svn::command(command, &paths, &r.message, None)?);
+                let args = if ignore {
+                    let Some(args) =
+                        wc::prepare_ignore(p, &paths, action == "unignore", &r.client)?
+                    else {
+                        result["status"] = json!("已取消");
+                        return Ok(result);
+                    };
+                    p.args(&args)
+                } else {
+                    p.args(&svn::command(command, &paths, &r.message, None)?)
+                };
                 if matches!(action, "commit" | "delete" | "revert" | "resolve") {
                     let body = format!(
                         "目录：{}\n操作：{action}\n\n{}\n\n{}",
                         s.root,
                         paths.join("\n"),
-                        if action == "commit" {
+                        if directory_revert {
+                            "将还原此目录下的全部已跟踪修改。新增路径会取消版本控制；未跟踪和已忽略文件不会被删除。"
+                        } else if action == "commit" {
                             r.message.as_str()
                         } else {
                             "此操作可能丢弃所选文件的本地修改。目录删除包括所有后代。"
@@ -401,6 +433,14 @@ impl SvnPlugin {
                         return Ok(result);
                     }
                     wc::dirty(p, &paths, false)?;
+                    if directory_revert {
+                        wc::check_revert_directory(p, &paths[0])?;
+                    } else if action == "revert" {
+                        let (_, latest) = wc::refresh(p)?;
+                        if wc::selected_revert_paths(p, &latest, &paths)? != paths {
+                            return Err(wc::error("所选路径状态已变化，请刷新后重新确认。"));
+                        }
+                    }
                 }
                 let task = host::begin_task(&format!("SVN {action}"), true);
                 task.report(0, None, Some("正在启动…"));

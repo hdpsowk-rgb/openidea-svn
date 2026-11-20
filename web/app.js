@@ -2,9 +2,9 @@ import {reconcileSelection, committable, shouldRefresh, acceptResponse, snapshot
 
 const $ = id => document.getElementById(id);
 const bridge = window.openidea;
-const state = {client:`svn-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,10)}`,root:null,pendingRoot:null,roots:[],generation:0,entries:[],selected:new Set(),active:null,logs:[],historyPaths:[],busy:false,lastRefresh:0,visible:true,documentVisible:!document.hidden,tab:'changes',info:null,refreshSettings:{enabled:false,intervalSeconds:30},viewMode:'tree',collapsed:new Set()};
+const state = {client:`svn-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,10)}`,root:null,pendingRoot:null,roots:[],generation:0,entries:[],selected:new Set(),active:null,activeFolder:null,includeIgnored:false,logs:[],historyPaths:[],busy:false,lastRefresh:0,visible:true,documentVisible:!document.hidden,tab:'changes',info:null,refreshSettings:{enabled:false,intervalSeconds:30},viewMode:'tree',collapsed:new Set()};
 const labels = {modified:'修改',added:'新增',deleted:'删除',missing:'缺失',unversioned:'未跟踪',conflicted:'冲突',replaced:'替换（需终端确认）',external:'外部副本',normal:'属性修改',obstructed:'阻塞',incomplete:'不完整',ignored:'已忽略'};
-const badges = {modified:'M',added:'A',deleted:'D',missing:'!',unversioned:'?',conflicted:'C',replaced:'R',external:'X',normal:'P',obstructed:'~',incomplete:'!'};
+const badges = {modified:'M',added:'A',deleted:'D',missing:'!',unversioned:'?',conflicted:'C',replaced:'R',external:'X',ignored:'I',normal:'P',obstructed:'~',incomplete:'!'};
 
 function send(action, extra={}, next=true) {
   if (!bridge) return;
@@ -13,7 +13,7 @@ function send(action, extra={}, next=true) {
 }
 function request(action, extra={}) {
   if (state.busy) return;
-  if (action==='refresh') state.lastRefresh=Date.now();
+  if (action==='refresh') {state.lastRefresh=Date.now();extra={includeIgnored:$('show-ignored').checked,...extra};}
   notice(''); setBusy(true, '正在执行…'); send(action,extra);
 }
 function notice(text) { $('notice').textContent=text; $('notice').classList.toggle('hidden',!text); }
@@ -25,6 +25,7 @@ function setBusy(busy,label) {
   $('auto-refresh').disabled=busy;
   $('changes-view').disabled=busy;
   $('check-all').disabled=busy;
+  $('show-ignored').disabled=busy;
   for(const el of document.querySelectorAll('#files input[type=checkbox]'))el.disabled=busy||el.dataset.eligible!=='true';
   $('refresh-interval').disabled=busy||!state.refreshSettings.enabled;
   $('status').textContent=label || (busy?'正在执行…':`${state.entries.length} 项本地变更`);
@@ -43,10 +44,10 @@ function updateSelection() {
   $('check-all').checked=eligible.length>0&&checked===eligible.length;
   $('check-all').indeterminate=checked>0&&checked<eligible.length;
 }
-function focusRow(path,activate=false) {const row=[...$('files').children].find(el=>el.dataset.path===path);if(row&&activate)activatePath(row.dataset.entryPath||null);row?.focus?.();}
-function activatePath(path) {
-  state.active=path;
-  for(const row of $('files').children)row.classList.toggle('active',Boolean(path)&&row.dataset.path===path);
+function focusRow(path,activate=false) {const row=[...$('files').children].find(el=>el.dataset.path===path);if(row&&activate)activatePath(row.dataset.entryPath||null,row.dataset.directory==='true'?path:null);row?.focus?.();}
+function activatePath(path,folder=null) {
+  state.active=path;state.activeFolder=folder;
+  for(const row of $('files').children)row.classList.toggle('active',Boolean(path||folder)&&row.dataset.path===(folder||path));
 }
 function renderFiles() {
   const files=$('files');files.replaceChildren();const entries=visibleEntries();const tree=state.viewMode==='tree';
@@ -60,13 +61,13 @@ function renderFiles() {
     const entry=branch.entry;const directory=tree&&branch.directory;const hasChildren=directory&&branch.children.length>0;
     const expanded=hasChildren&&(!$('filter').value.trim()? !state.collapsed.has(branch.path):true);
     const scope=directory?branch.entries:(entry?[entry]:[]);
-    const row=node('div',`file${directory?' directory':''}${state.active===branch.path?' active':''}`);row.tabIndex=0;row.title=branch.path;row.dataset.path=branch.path;row.dataset.entryPath=entry?.path||'';
+    const row=node('div',`file${directory?' directory':''}${state.active===branch.path||state.activeFolder===branch.path?' active':''}`);row.tabIndex=0;row.title=branch.path;row.dataset.path=branch.path;row.dataset.entryPath=entry?.path||'';row.dataset.directory=String(directory||entry?.kind==='dir');
     row.setAttribute('role',tree?'treeitem':'listitem');if(tree){row.setAttribute('aria-level',String(depth+1));row.setAttribute('style',`--tree-indent:${depth*16}px`);}
     if(hasChildren)row.setAttribute('aria-expanded',String(expanded));
     const toggle=()=>{if(!hasChildren||$('filter').value.trim())return;if(state.collapsed.has(branch.path))state.collapsed.delete(branch.path);else state.collapsed.add(branch.path);renderFiles();focusRow(branch.path);};
     const checkbox=node('input');checkbox.type='checkbox';const group=groupSelection(scope,state.selected);checkbox.checked=group.checked;checkbox.indeterminate=group.indeterminate;checkbox.disabled=group.disabled||state.busy;checkbox.dataset.eligible=String(!group.disabled);
     checkbox.setAttribute('aria-label',directory?`选择目录 ${branch.path} 中的可提交项`:`选择 ${branch.path}`);
-    const change=()=>{state.selected=selectGroup(state.selected,scope,checkbox.checked);state.active=null;renderFiles();focusRow(branch.path);};
+    const change=()=>{state.selected=selectGroup(state.selected,scope,checkbox.checked);state.active=null;state.activeFolder=null;renderFiles();focusRow(branch.path);};
     checkbox.addEventListener('click',e=>e.stopPropagation());checkbox.addEventListener('change',change);row.append(checkbox);
     if(tree) {
       if(hasChildren){const disclosure=node('button','disclosure');disclosure.disabled=Boolean($('filter').value.trim());disclosure.setAttribute('aria-label',`${expanded?'收起':'展开'} ${branch.path}`);disclosure.addEventListener('click',e=>{e.stopPropagation();toggle();});row.append(disclosure);}
@@ -77,8 +78,9 @@ function renderFiles() {
     row.append(node('span','path',tree?branch.name:branch.path));
     if(directory)row.append(node('span','group-count muted',String(scope.length)));
     if(status){row.append(node('span',`badge ${status}`,badges[status]||'?'),node('span','kind',labels[status]||status));row.dataset.status=status;}
-    row.addEventListener('click',()=>activatePath(entry?entry.path:null));
-    if(!directory&&entry)row.addEventListener('dblclick',()=>request('diff',{paths:[entry.path]}));
+    row.addEventListener('click',()=>activatePath(entry?entry.path:null,directory||entry?.kind==='dir'?branch.path:null));
+    if(directory)row.addEventListener('dblclick',e=>{if(!['input','button'].includes(e.target.tagName.toLowerCase()))toggle();});
+    else if(entry&&entry.kind!=='dir')row.addEventListener('dblclick',()=>request('diff',{paths:[entry.path]}));
     row.addEventListener('keydown',e=>{
       if(e.target!==row)return;
       if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();const rows=[...files.children].filter(el=>el.dataset.path);const i=rows.indexOf(row);focusRow(rows[i+(e.key==='ArrowDown'?1:-1)]?.dataset.path,true);}
@@ -94,6 +96,7 @@ function renderFiles() {
   else for(const entry of entries)appendRow({entry,path:entry.path,name:entry.path,directory:false,children:[]},0);
   if(!entries.length&&state.entries.length)files.append(node('div','empty muted','没有匹配的路径'));
   if(state.active&&![...files.children].some(row=>row.dataset.path===state.active))state.active=null;
+  if(state.activeFolder&&![...files.children].some(row=>row.dataset.path===state.activeFolder))state.activeFolder=null;
   updateSelection();
 }
 function switchTab(tab, load=true) {
@@ -131,7 +134,7 @@ function renderRoots(roots) {
   select.value=state.pendingRoot||state.root||roots[0]||'';select.title=select.value;
 }
 function resetDirectory() {
-  state.entries=[];state.selected=new Set();state.active=null;state.logs=[];state.historyPaths=[];state.info=null;state.lastRefresh=0;state.collapsed=new Set();
+  state.entries=[];state.selected=new Set();state.active=null;state.activeFolder=null;state.logs=[];state.historyPaths=[];state.info=null;state.lastRefresh=0;state.collapsed=new Set();
   $('filter').value='';$('message').value='';$('output').textContent='';$('repository').textContent='正在读取工作副本…';$('repository').title='';
   renderFiles();renderHistory();$('log-detail').replaceChildren(node('div','empty muted','选择一条提交记录'));switchTab('changes',false);
 }
@@ -141,7 +144,7 @@ function selectRoot(directory) {
 }
 
 function selectedOrActive() {return state.active?[state.active]:[...state.selected];}
-function fileAction(action) {const paths=selectedOrActive();if(!paths.length){notice('请先点击一个文件，或勾选要操作的文件。');return;}request(action,{paths});}
+function fileAction(action) {if(action==='revert'&&state.activeFolder){request(action,{directory:state.activeFolder,paths:[state.activeFolder]});return;}if(state.activeFolder&&!state.active){notice('请选择具体文件，或使用还原处理整个目录。');return;}const paths=selectedOrActive();if(!paths.length){notice('请先点击一个文件，或勾选要操作的文件。');return;}request(action,{paths});}
 
 if(bridge) {
   bridge.onMessage(text=>{
@@ -154,22 +157,23 @@ if(bridge) {
     if(message.type==='hello')state.pendingRoot=null;
     if(message.root){state.root=message.root;$('root').textContent=message.root;$('root').title=message.root;}
     if(message.settings){state.refreshSettings=message.settings;$('auto-refresh').checked=message.settings.enabled;$('refresh-interval').value=String(message.settings.intervalSeconds);state.lastRefresh=Date.now();}
+    if(typeof message.includeIgnored==='boolean'){state.includeIgnored=message.includeIgnored;$('show-ignored').checked=message.includeIgnored;}
     if(message.viewMode){state.viewMode=message.viewMode;renderFiles();}
     if(message.roots)renderRoots(message.roots);
     if(message.output)output(message.output);
     if(message.info){state.info=message.info;$('repository').textContent=`${message.info.url} · r${message.info.revision}`;$('repository').title=message.info.url;}
     if(message.entries){const changed=snapshotChanged(state.entries,message.entries);state.entries=message.entries;state.selected=reconcileSelection(state.selected,state.entries);if(!state.entries.some(e=>e.path===state.active))state.active=null;state.lastRefresh=Date.now();if(changed)renderFiles();}
     if(message.logs){state.logs=message.append?[...state.logs,...message.logs.filter(l=>!state.logs.some(old=>old.revision===l.revision))]:message.logs;if(!message.append)$('log-detail').replaceChildren(node('div','empty muted','选择一条提交记录'));renderHistory();}
-    if(message.selectPaths){state.selected=new Set(message.selectPaths.filter(p=>state.entries.some(e=>e.path===p&&committable(e))));state.active=message.selectPaths[0]||null;renderFiles();}
+    if(message.selectPaths){state.activeFolder=null;state.selected=new Set(message.selectPaths.filter(p=>state.entries.some(e=>e.path===p&&committable(e))));state.active=message.selectPaths[0]||null;renderFiles();}
     if(message.clearMessage)$('message').value='';
     if(message.type==='hello'){$('message').value=message.draft||'';updateSelection();}
-    if(message.error){notice(message.error);$('changes-view').value=state.viewMode;$('auto-refresh').checked=state.refreshSettings.enabled;$('refresh-interval').value=String(state.refreshSettings.intervalSeconds);}
+    if(message.error){notice(message.error);$('show-ignored').checked=state.includeIgnored;$('changes-view').value=state.viewMode;$('auto-refresh').checked=state.refreshSettings.enabled;$('refresh-interval').value=String(state.refreshSettings.intervalSeconds);}
     setBusy(Boolean(message.busy),message.status);
     if(message.menuDirectory&&message.menuDirectory!==state.root&&!state.busy){selectRoot(message.menuDirectory);return;}
     if(message.type==='hello'){request('refresh');}
     if(message.menu){
       const {action,paths=[]}=message.menu;
-      state.active=paths[0]||null;
+      state.active=paths[0]||null;state.activeFolder=null;
       if(paths.length)state.selected=new Set(paths.filter(p=>state.entries.some(e=>e.path===p&&committable(e))));
       renderFiles();
       if(action==='log'){state.historyPaths=[...paths];switchTab('history',false);if(!state.busy)request('log',{paths:state.historyPaths});}
@@ -193,6 +197,8 @@ function saveRefreshSettings() {
 }
 $('auto-refresh').addEventListener('change',saveRefreshSettings);
 $('refresh-interval').addEventListener('change',saveRefreshSettings);
+$('show-ignored').addEventListener('change',()=>request('refresh'));
+$('ignore-action').addEventListener('change',()=>{const action=$('ignore-action').value;if(action)fileAction(action);$('ignore-action').value='';});
 $('changes-view').addEventListener('change',()=>request('view-mode',{viewMode:$('changes-view').value}));
 $('expand-all').addEventListener('click',()=>{state.collapsed.clear();renderFiles();});
 $('collapse-all').addEventListener('click',()=>{if($('filter').value.trim())return;const collect=nodes=>{for(const n of nodes){if(n.directory)state.collapsed.add(n.path);collect(n.children);}};collect(buildChangeTree(state.entries));renderFiles();});
@@ -200,7 +206,7 @@ $('project-root').addEventListener('change',()=>selectRoot($('project-root').val
 $('filter').addEventListener('input',renderFiles);
 $('message').addEventListener('input',()=>{updateSelection();if(!state.busy)send('draft',{message:$('message').value},false);});
 $('message').addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)&&!$('commit').disabled){e.preventDefault();$('commit').click();}});
-$('check-all').addEventListener('change',()=>{state.active=null;for(const entry of visibleEntries().filter(committable)){if($('check-all').checked)state.selected.add(entry.path);else state.selected.delete(entry.path);}renderFiles();});
+$('check-all').addEventListener('change',()=>{state.active=null;state.activeFolder=null;for(const entry of visibleEntries().filter(committable)){if($('check-all').checked)state.selected.add(entry.path);else state.selected.delete(entry.path);}renderFiles();});
 for(const button of document.querySelectorAll('[data-tab]'))button.addEventListener('click',()=>switchTab(button.dataset.tab));
 for(const action of ['refresh','update','cleanup','authenticate'])$(action).addEventListener('click',()=>request(action));
 for(const action of ['diff','open','add','delete','revert'])$(action).addEventListener('click',()=>fileAction(action));

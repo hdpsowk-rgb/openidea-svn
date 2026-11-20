@@ -23,6 +23,17 @@ test('tree grouping, filtering and folder checks preserve exact selected SVN tar
     const disclosure=path=>row(path)?.children.find(el=>el.tagName==='button');
     assert.ok(row('frontend'),'directory ancestors were not rendered');assert.ok(row('frontend/src'));assert.equal(row('frontend/src/a.js').children.find(el=>el.className==='path').textContent,'a.js');
     assert.equal(row('frontend/src/a.js').title,'frontend/src/a.js');
+    const beforeDoubleClick=sent.length;
+    row('frontend').fire('dblclick');assert.equal(row('frontend/src/a.js'),undefined,'double-click did not collapse directory');
+    row('frontend').fire('dblclick');assert.ok(row('frontend/src/a.js'),'double-click did not expand directory');
+    row('frontend').fire('dblclick',{target:checkbox('frontend')});assert.ok(row('frontend/src/a.js'),'checkbox double-click collapsed directory');
+    assert.equal(sent.length,beforeDoubleClick,'directory double-click invoked SVN');
+    row('frontend').click();get('revert').click();assert.equal(sent.at(-1).directory,'frontend','directory row revert lost its explicit scope');assert.deepEqual(sent.at(-1).paths,['frontend']);reply({});
+    row('z-untracked.txt').click();get('ignore-action').value='ignore';get('ignore-action').fire('change');assert.equal(sent.at(-1).action,'ignore');assert.deepEqual(sent.at(-1).paths,['z-untracked.txt']);reply({});
+    const beforeShow=sent.length;get('show-ignored').checked=true;get('show-ignored').fire('change');assert.equal(sent.length,beforeShow+1);assert.equal(sent.at(-1).includeIgnored,true);
+    reply({includeIgnored:true,entries:[...entries,{path:'ignored.tmp',status:'ignored',kind:'file'}]});
+    row('ignored.tmp').click();get('ignore-action').value='unignore';get('ignore-action').fire('change');assert.equal(sent.at(-1).action,'unignore');assert.deepEqual(sent.at(-1).paths,['ignored.tmp']);reply({});
+    get('show-ignored').checked=false;get('show-ignored').fire('change');reply({includeIgnored:false,entries});
     row('backend/api.php').click();checkbox('frontend').checked=true;checkbox('frontend').fire('change');
     assert.equal(checkbox('frontend/src/conflict.js').disabled,true);
     get('message').value='selected tree files';get('commit').click();assert.equal(sent.at(-1).action,'commit');

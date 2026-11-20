@@ -30,10 +30,10 @@
     </div>
     <section id="changes-page" role="tabpanel" aria-labelledby="changes-tab" class="page changes-layout">
       <div class="changes">
-        <div class="filter-row"><input id="filter" type="search" placeholder="按路径筛选…" aria-label="筛选变更路径"><label class="check-all"><input id="check-all" type="checkbox">全选可提交项</label></div>
+        <div class="filter-row"><input id="filter" type="search" placeholder="按路径筛选…" aria-label="筛选变更路径"><div class="filter-options"><label class="check-all"><input id="show-ignored" type="checkbox">显示已忽略</label><label class="check-all"><input id="check-all" type="checkbox">全选可提交项</label></div></div>
         <div class="file-toolbar" aria-label="文件操作">
           <div class="action-tools"><button id="diff"><span class="icon i-diff" aria-hidden="true"></span>差异</button><button id="open"><span class="icon i-open" aria-hidden="true"></span>打开</button><button id="add" data-write><span class="icon i-add" aria-hidden="true"></span>添加</button><button id="delete" data-write><span class="icon i-delete" aria-hidden="true"></span>删除</button><button id="revert" data-write><span class="icon i-revert" aria-hidden="true"></span>还原</button>
-          <select id="resolve" aria-label="解决选中文件的冲突" data-write><option value="">解决冲突…</option value="mine-full">使用我的版本</option><option value="theirs-full">使用仓库版本</option><option value="working">标记已解决</option></select></div>
+          <select id="resolve" aria-label="解决选中文件的冲突" data-write><option value="">解决冲突…</option value="mine-full">使用我的版本</option><option value="theirs-full">使用仓库版本</option><option value="working">标记已解决</option></select><select id="ignore-action" aria-label="忽略或取消忽略所选项目" data-write><option value="">忽略…</option><option value="ignore">忽略所选项</option><option value="unignore">取消忽略所选项</option></select></div>
           <div class="view-tools" aria-label="变更视图选项"><select id="changes-view" aria-label="本地变更视图"><option value="tree">树状</option><option value="list">列表</option></select><button id="expand-all" class="icon-button" aria-label="展开全部" title="展开全部"><span class="icon i-expand" aria-hidden="true"></span></button><button id="collapse-all" class="icon-button" aria-label="收起全部" title="收起全部（筛选时自动展开匹配目录）"><span class="icon i-collapse" aria-hidden="true"></span></button></div>
         </div>
         <div id="files" class="files" aria-label="变更文件列表"></div>
@@ -46,7 +46,7 @@
         <textarea id="message" aria-label="提交说明" placeholder="描述本次修改…" spellcheck="false"></textarea>
         <div id="selection-summary" class="selection-summary muted">尚未选择文件</div>
         <button id="commit" class="primary" data-write disabled>提交所选文件</button>
-        <span class="muted small commit-hint">⌘ / Ctrl + Enter 提交 · 双击文件查看差异</span>
+        <span class="muted small commit-hint">⌘ / Ctrl + Enter 提交 · 双击文件查看差异 · 双击目录展开/收起</span>
       </aside>
     </section>
     <section id="history-page" role="tabpanel" aria-labelledby="history-tab" class="page hidden">

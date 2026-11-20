@@ -9,6 +9,7 @@ pub struct Request {
     pub action: String,
     pub directory: Option<String>,
     pub view_mode: Option<crate::preferences::ChangeView>,
+    pub include_ignored: Option<bool>,
     pub settings: Option<crate::preferences::RefreshSettings>,
     #[serde(default)]
     pub paths: Vec<String>,
@@ -54,6 +55,8 @@ impl Request {
                 | "add"
                 | "delete"
                 | "revert"
+                | "ignore"
+                | "unignore"
                 | "update"
                 | "cleanup"
                 | "commit"
@@ -77,6 +80,14 @@ impl Request {
         }
         for path in &request.paths {
             crate::svn::target(path)?;
+        }
+        if request.action == "revert"
+            && let Some(directory) = &request.directory
+        {
+            crate::svn::target(directory)?;
+            if request.paths != [directory.clone()] {
+                return Err("目录还原必须只有一个明确的目录目标。".into());
+            }
         }
         if request.message.len() > 4096 {
             return Err("提交说明最多 4096 字节。".into());

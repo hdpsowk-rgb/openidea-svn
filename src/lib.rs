@@ -6,3 +6,5 @@ mod working_copy;
 pub mod workspace;
 
 pub mod preferences;
+
+pub mod ignore_rules;

@@ -438,3 +438,118 @@ fn change_view_mode_persists_without_changing_refresh_preferences() {
     assert_eq!(reopened["settings"]["enabled"], false);
     assert!(Request::parse(r#"{"client":"tree-one","generation":3,"root":"/project","action":"view-mode","viewMode":"arbitrary"}"#).is_err());
 }
+
+#[test]
+fn ignored_entries_are_requested_explicitly_and_ignore_cancellation_does_not_write() {
+    let host = MockHost::install().with_capabilities(&[
+        "project.read",
+        "editor.read",
+        "storage",
+        "process:svn",
+    ]);
+    host.add_file("cache.tmp", "local");
+    host.on_process("svn",|args,_|{
+        let text=match args[0].as_str(){
+            "status" if args.iter().any(|a|a=="--no-ignore")=>"<status><target path=\".\"><entry path=\"cache.tmp\"><wc-status item=\"ignored\" props=\"none\"/></entry></target></status>",
+            "status"=>"<status><target path=\".\"><entry path=\"cache.tmp\"><wc-status item=\"unversioned\" props=\"none\"/></entry></target></status>",
+            "proplist"=>"<properties/>",
+            _=>"<info><entry path=\".\" kind=\"dir\" revision=\"1\"><url>file:///repo</url><wc-info><wcroot-abspath>/project</wcroot-abspath></wc-info></entry></info>"
+        };Ok(openidea_plugin::ProcessOutput{status:Some(0),stdout:text.into(),stderr:String::new()})
+    });
+    let req = |action: &str, extra: serde_json::Value| {
+        let mut value = serde_json::json!({"client":"ignore-one","root":"/project","generation":1,"action":action});
+        for (k, v) in extra.as_object().unwrap() {
+            value[k] = v.clone();
+        }
+        Request::parse(&value.to_string()).unwrap()
+    };
+    let mut plugin = SvnPlugin::default();
+    let shown = plugin
+        .dispatch(
+            req("refresh", serde_json::json!({"includeIgnored":true})),
+            &host.invocation(),
+        )
+        .unwrap();
+    assert_eq!(shown["entries"][0]["status"], "ignored");
+    let hidden = plugin
+        .dispatch(
+            req("refresh", serde_json::json!({"includeIgnored":false})),
+            &host.invocation(),
+        )
+        .unwrap();
+    assert_eq!(hidden["entries"][0]["status"], "unversioned");
+    host.answer_next_prompt(None);
+    let cancelled = plugin
+        .dispatch(
+            req("ignore", serde_json::json!({"paths":["cache.tmp"]})),
+            &host.invocation(),
+        )
+        .unwrap();
+    assert_eq!(cancelled["busy"], false);
+    assert_eq!(cancelled["status"], "已取消");
+    assert!(
+        host.process_runs()
+            .iter()
+            .all(|r| !matches!(r.args[0].as_str(), "propset" | "propdel"))
+    );
+}
+
+#[test]
+fn directory_revert_is_explicit_confirmed_and_rejects_unknown_folders() {
+    let host = metadata_host();
+    host.on_process("svn",|args,_|{
+        let xml=if args[0]=="status" {"<status><target path=\".\"><entry path=\"src/a.txt\"><wc-status item=\"modified\" props=\"none\"/></entry><entry path=\"src/keep.tmp\"><wc-status item=\"unversioned\" props=\"none\"/></entry></target></status>"}else{"<info><entry path=\".\" kind=\"dir\" revision=\"1\"><url>file:///repo</url><wc-info><wcroot-abspath>/project</wcroot-abspath></wc-info></entry></info>"};
+        Ok(openidea_plugin::ProcessOutput{status:Some(0),stdout:xml.into(),stderr:String::new()})
+    });
+    let req = |directory: &str| {
+        Request::parse(&serde_json::json!({"client":"folder-revert","generation":1,"root":"/project","action":"revert","directory":directory,"paths":[directory]}).to_string()).unwrap()
+    };
+    let mut plugin = SvnPlugin::default();
+    host.answer_next_prompt(None);
+    let cancelled = plugin.dispatch(req("src"), &host.invocation()).unwrap();
+    assert_eq!(cancelled["status"], "已取消");
+    host.answer_next_prompt(Some(&["yes"]));
+    let result = plugin.dispatch(req("src"), &host.invocation()).unwrap();
+    assert_eq!(result["busy"], true);
+    plugin
+        .dispatch(
+            request("cancel", Some("/project"), "folder-revert"),
+            &host.invocation(),
+        )
+        .unwrap();
+    assert!(
+        plugin
+            .dispatch(req("unrelated"), &host.invocation())
+            .is_err()
+    );
+    host.open_editor("/project/src/a.txt", "text", "base", &[]);
+    host.type_in_editor("unsaved");
+    assert!(
+        plugin
+            .dispatch(req("src"), &host.invocation())
+            .unwrap_err()
+            .to_string()
+            .contains("未保存")
+    );
+}
+
+#[test]
+fn root_ignore_property_change_remains_committable() {
+    let host = metadata_host();
+    host.add_file(".svn/entries", "metadata");
+    host.add_dir("./.svn");
+    host.on_process("svn",|args,_|{
+        let xml=if args[0]=="status"{"<status><target path=\".\"><entry path=\".\"><wc-status item=\"normal\" props=\"modified\"/></entry></target></status>"}else{"<info><entry path=\".\" kind=\"dir\" revision=\"1\"><url>file:///repo</url><wc-info><wcroot-abspath>/project</wcroot-abspath></wc-info></entry></info>"};Ok(openidea_plugin::ProcessOutput{status:Some(0),stdout:xml.into(),stderr:String::new()})
+    });
+    let mut plugin = SvnPlugin::default();
+    let response = plugin
+        .dispatch(
+            request("refresh", Some("/project"), "root-rules"),
+            &host.invocation(),
+        )
+        .unwrap();
+    assert_eq!(response["entries"][0]["status"], "normal");
+    let entries: Vec<openidea_svn::svn::Entry> =
+        serde_json::from_value(response["entries"].clone()).unwrap();
+    openidea_svn::svn::validate_commit(&entries, &[".".into()]).unwrap();
+}
