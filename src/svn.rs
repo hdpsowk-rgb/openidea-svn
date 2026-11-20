@@ -364,6 +364,33 @@ pub fn parse_log(xml: &str) -> Result<Vec<LogEntry>, String> {
         .collect())
 }
 
+pub fn has_special_property(xml: &str) -> Result<bool, String> {
+    #[derive(Deserialize)]
+    struct Properties {
+        #[serde(default, rename = "target")]
+        targets: Vec<PropertyTarget>,
+    }
+    #[derive(Deserialize)]
+    struct PropertyTarget {
+        #[serde(default, rename = "property")]
+        properties: Vec<PropertyName>,
+    }
+    #[derive(Deserialize)]
+    struct PropertyName {
+        #[serde(rename = "@name")]
+        name: String,
+    }
+    let parsed: Properties = parse_xml(xml, "properties")?;
+    if parsed.targets.len() > 1 {
+        return Err("文件属性返回了多个目标，请刷新后重试。".into());
+    }
+    Ok(parsed
+        .targets
+        .iter()
+        .flat_map(|target| &target.properties)
+        .any(|property| property.name == "svn:special"))
+}
+
 pub fn command(
     action: &str,
     paths: &[String],
@@ -376,6 +403,7 @@ pub fn command(
     let mut args: Vec<String> = match action {
         "status" => vec!["status", "--xml", "--ignore-externals"],
         "ignore-list" => vec!["proplist", "--xml", "--verbose", "--depth", "empty"],
+        "properties" => vec!["proplist", "--xml", "--depth", "empty"],
         "info" => vec!["info", "--xml", "--depth", "empty"],
         "info-tree" => vec!["info", "--xml", "--depth", "infinity"],
         "log" => vec!["log", "--xml", "--verbose", "--limit", "50"],
@@ -385,7 +413,16 @@ pub fn command(
         "revert-tree" => vec!["revert", "--depth", "infinity"],
         "update" => vec!["update", "--ignore-externals"],
         "cleanup" => vec!["cleanup"],
-        "commit" => vec!["commit", "--depth", "empty", "--message"],
+        // Bridge/request strings are UTF-8. Never let SVN reinterpret the log
+        // message using a GUI locale or the user's legacy log-encoding config.
+        "commit" => vec![
+            "commit",
+            "--depth",
+            "empty",
+            "--encoding",
+            "UTF-8",
+            "--message",
+        ],
         "cat-base" => vec!["cat", "--revision", "BASE"],
         "cat-revision" => vec!["cat", "--revision"],
         "resolve-mine" => vec!["resolve", "--accept", "mine-full", "--depth", "empty"],

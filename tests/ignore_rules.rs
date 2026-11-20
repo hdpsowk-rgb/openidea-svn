@@ -233,6 +233,48 @@ fn matching_ignore_patterns_identify_overlapping_and_unrelated_rules() {
 }
 
 #[test]
+fn utf8_ignore_properties_do_not_depend_on_the_gui_locale() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    assert!(
+        Command::new("svnadmin")
+            .args(["create", "repo"])
+            .current_dir(root)
+            .status()
+            .unwrap()
+            .success()
+    );
+    run(
+        root,
+        &[
+            "co".into(),
+            format!("file://{}/repo", root.display()),
+            "wc".into(),
+        ],
+    );
+    let wc = root.join("wc");
+    let file = root.join("rules.txt");
+    fs::write(&file, "中文.txt\n").unwrap();
+    let output = Command::new("svn")
+        .current_dir(&wc)
+        .args(rules::command(".", Some(file.to_str().unwrap())).unwrap())
+        .env("LC_ALL", "C")
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let actual = rules::parse(&run(
+        &wc,
+        &svn::command("ignore-list", &[".".into()], "", None).unwrap(),
+    ))
+    .unwrap();
+    assert_eq!(actual.as_deref(), Some("中文.txt\n"));
+}
+
+#[test]
 fn ignore_globs_agree_with_the_local_svn_client() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
@@ -262,6 +304,9 @@ fn ignore_globs_agree_with_the_local_svn_client() {
         ".hidden",
         "中.txt",
         "space name.tmp",
+        "[bad",
+        "[]",
+        "[!bad",
     ];
     for name in names {
         fs::write(wc.join(name), "local").unwrap();
@@ -280,6 +325,9 @@ fn ignore_globs_agree_with_the_local_svn_client() {
         "?.txt",
         "???.txt",
         "space name.tmp",
+        "[bad",
+        "[]",
+        "[!bad",
     ] {
         let value = format!("{pattern}\n");
         fs::write(&file, &value).unwrap();

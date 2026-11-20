@@ -149,6 +149,31 @@ fn projects_inside_one_working_copy_share_the_write_lock() {
 }
 
 #[test]
+fn a_fresh_panel_in_a_busy_working_copy_cannot_bypass_the_shared_lock() {
+    let host = metadata_host();
+    let mut plugin = SvnPlugin::default();
+    host.set_project_root(Some("/project/one"));
+    plugin
+        .dispatch(
+            request("refresh", Some("/project/one"), "one"),
+            &host.invocation(),
+        )
+        .unwrap();
+    plugin
+        .dispatch(
+            request("update", Some("/project/one"), "one"),
+            &host.invocation(),
+        )
+        .unwrap();
+    host.set_project_root(Some("/project/two"));
+    let result = plugin.dispatch(
+        request("update", Some("/project/two"), "new-panel"),
+        &host.invocation(),
+    );
+    assert!(result.unwrap_err().to_string().contains("另一个 SVN 面板"));
+}
+
+#[test]
 fn editor_menu_bare_path_argument_is_kept_when_selection_list_is_empty() {
     use openidea_plugin::Plugin;
     let host = metadata_host();

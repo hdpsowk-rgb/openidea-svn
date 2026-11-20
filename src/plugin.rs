@@ -16,6 +16,7 @@ use std::{
 };
 
 const VIEW: &str = "svn";
+const HISTORY_LIMIT: usize = 2000;
 struct Job {
     child: host::Child,
     task: Task,
@@ -85,13 +86,12 @@ impl SvnPlugin {
             return Err(wc::error("所选目录已从工作区移除，请选择其他目录。"));
         }
         let project = Scope::new(project, root.clone());
-        let lock_root = self
+        let lock_info = self
             .sessions
             .get(&request.client)
             .and_then(|s| s.info.as_ref())
-            .map(|i| i.wc_root.as_str())
-            .filter(|s| !s.is_empty())
-            .unwrap_or(&root);
+            .filter(|info| !info.wc_root.is_empty());
+        let lock_root = lock_info.map(|info| info.wc_root.as_str()).unwrap_or(&root);
         if !matches!(
             request.action.as_str(),
             "hello" | "select-root" | "view-mode" | "settings" | "poll" | "cancel" | "draft"
@@ -99,9 +99,13 @@ impl SvnPlugin {
             id != &request.client
                 && s.job.is_some()
                 && (s.root == root
-                    || s.info
-                        .as_ref()
-                        .is_some_and(|i| !i.wc_root.is_empty() && i.wc_root == lock_root))
+                    || s.info.as_ref().is_some_and(|i| {
+                        !i.wc_root.is_empty()
+                            && (workspace::relative_path(&i.wc_root, lock_root).as_deref()
+                                == Some(".")
+                                || lock_info.is_none()
+                                    && workspace::relative_path(&i.wc_root, &root).is_some())
+                    }))
         }) {
             return Err(wc::error(
                 "此工作副本正在另一个 SVN 面板中执行操作，请等待完成。",
@@ -296,17 +300,20 @@ impl SvnPlugin {
                     s.info = Some(info);
                     s.entries = entries;
                 }
-                let logs = svn::parse_log(&wc::read(
+                let mut logs = svn::parse_log(&wc::read(
                     p,
                     &svn::command("log", &r.paths, "", r.revision)?,
                 )?)?;
-                result["logs"] = json!(logs);
-                result["append"] = json!(r.append);
+                let full_page = logs.len() == 50 && logs.last().is_some_and(|log| log.revision > 1);
                 if !r.append {
                     s.logs.clear();
                 }
+                logs.truncate(HISTORY_LIMIT.saturating_sub(s.logs.len()));
+                result["logs"] = json!(logs);
+                result["append"] = json!(r.append);
                 s.logs.extend(logs);
-                s.logs.truncate(2000);
+                result["hasMore"] = json!(full_page && s.logs.len() < HISTORY_LIMIT);
+                result["historyLimitReached"] = json!(s.logs.len() >= HISTORY_LIMIT);
             }
             "diff" => {
                 let path = r.paths.first().ok_or("请选择文件。")?;
@@ -444,7 +451,8 @@ impl SvnPlugin {
                 }
                 let task = host::begin_task(&format!("SVN {action}"), true);
                 task.report(0, None, Some("正在启动…"));
-                let child = host::start(&host::Command::new("svn").args(&args), Some(&p.project))?;
+                let child =
+                    wc::with_utf8_locale(&args, |command| host::start(command, Some(&p.project)))?;
                 child.close_stdin()?;
                 s.job = Some(Job {
                     child,
@@ -659,5 +667,47 @@ mod lifecycle_tests {
                 .contains("FINAL_DIAGNOSTIC")
         );
         assert_eq!(result["busy"], false);
+    }
+
+    #[test]
+    fn history_pages_stop_at_the_retention_limit_without_exposing_unreadable_rows() {
+        let host = MockHost::install().with_capabilities(&["project.read", "process:svn"]);
+        host.on_process("svn",|args,_| {
+            let stdout=if args[0]=="log" {format!("<log>{}</log>",(961..=1010).rev().map(|revision|format!("<logentry revision=\"{revision}\"><paths><path action=\"M\" kind=\"file\">/f.txt</path></paths><msg>m</msg></logentry>")).collect::<String>())}else{"content".into()};
+            Ok(openidea_plugin::ProcessOutput{status:Some(0),stdout,stderr:String::new()})
+        });
+        let mut plugin = SvnPlugin::default();
+        plugin.sessions.insert(
+            "one".into(),
+            Session {
+                root: "/project".into(),
+                window_root: "/project".into(),
+                info: Some(Info {
+                    root_url: "file:///repo".into(),
+                    ..Default::default()
+                }),
+                logs: (1011..=3000)
+                    .rev()
+                    .map(|revision| LogEntry {
+                        revision,
+                        ..Default::default()
+                    })
+                    .collect(),
+                ..Default::default()
+            },
+        );
+        let request=Request::parse(&json!({"client":"one","generation":1,"root":"/project","action":"log","append":true,"revision":1010}).to_string()).unwrap();
+        let result = plugin.dispatch(request, &host.invocation()).unwrap();
+        assert_eq!(
+            result["logs"].as_array().unwrap().len(),
+            10,
+            "host exposed rows beyond its retained history"
+        );
+        assert_eq!(result["hasMore"], false);
+        assert_eq!(result["historyLimitReached"], true);
+        assert_eq!(plugin.sessions["one"].logs.len(), 2000);
+        let request=Request::parse(&json!({"client":"one","generation":2,"root":"/project","action":"history-diff","revision":1001,"path":"/f.txt"}).to_string()).unwrap();
+        plugin.dispatch(request, &host.invocation()).unwrap();
+        assert_eq!(host.opened_diffs().len(), 1);
     }
 }

@@ -160,8 +160,8 @@ mod tests {
         let scope = Scope::new(host.invocation().project().unwrap(), "/second".into());
         let args = crate::svn::command("commit", &["a.txt".into()], "--", None).unwrap();
         let actual = scope.args(&args);
-        assert_eq!(actual[5], "--non-interactive");
+        assert!(actual.iter().any(|arg| arg == "--non-interactive"));
         assert_eq!(actual.last().unwrap(), "/second/a.txt@");
-        assert_eq!(actual[4], "--");
+        assert!(actual.windows(2).any(|pair| pair == ["--message", "--"]));
     }
 }

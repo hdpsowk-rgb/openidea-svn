@@ -97,6 +97,8 @@ pub fn command(parent: &str, value_file: Option<&str>) -> Result<Vec<String>, St
             "propset".into(),
             "--file".into(),
             file.into(),
+            "--encoding".into(),
+            "UTF-8".into(),
             "svn:ignore".into(),
         ]
     } else {
@@ -123,6 +125,7 @@ fn glob_matches(pattern: &[u8], name: &[u8]) -> bool {
     let mut previous = vec![false; name.len() + 1];
     previous[0] = true;
     let mut i = 0;
+    let mut unterminated_class = false;
     while i < pattern.len() {
         let token = pattern[i];
         i += 1;
@@ -136,7 +139,9 @@ fn glob_matches(pattern: &[u8], name: &[u8]) -> bool {
             let mut ranges = Vec::new();
             let mut negate = false;
             let mut literal = token;
-            if token == b'[' {
+            let mut character_class = false;
+            if token == b'[' && !unterminated_class {
+                let after_open = i;
                 if i < pattern.len() && matches!(pattern[i], b'!' | b'^') {
                     negate = true;
                     i += 1;
@@ -169,7 +174,12 @@ fn glob_matches(pattern: &[u8], name: &[u8]) -> bool {
                     ranges.push((start, end));
                 }
                 if !closed {
-                    return false;
+                    // APR treats an unterminated '[' as a literal. No later
+                    // class can close either; avoid repeatedly scanning the tail.
+                    i = after_open;
+                    unterminated_class = true;
+                } else {
+                    character_class = true;
                 }
             } else if token == b'\\' && i < pattern.len() {
                 literal = pattern[i];
@@ -178,7 +188,7 @@ fn glob_matches(pattern: &[u8], name: &[u8]) -> bool {
             for j in 1..=name.len() {
                 let hit = if token == b'?' {
                     true
-                } else if token == b'[' {
+                } else if character_class {
                     ranges
                         .iter()
                         .any(|(a, b)| *a <= name[j - 1] && name[j - 1] <= *b)
