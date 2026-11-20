@@ -12,15 +12,30 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Verify and publish signed 0.1.6 package
+        with:
+          fetch-depth: 0
+      - name: Publish reviewed source and signed 0.1.8 package
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          asset=".release-upload/hdpsowk-rgb.svn-0.1.6.oiplugin"
-          echo "5a7cebf595614276ae49227ec928edfeeb8ec55470064cbf852b147e5c58b3e5  $asset" | sha256sum --check
-          if gh release view v0.1.6 >/dev/null 2>&1; then
-            echo "Release v0.1.6 already exists; refusing to replace its assets."
+          asset="hdpsowk-rgb.svn-0.1.8.oiplugin"
+          bundle="release-source-0.1.8.bundle"
+          echo "a74a0709c78a6dc5cafd3844b2f198fb2ca6691bd52a98b05d8bc6bb6822a025  $asset" | sha256sum --check
+          echo "43dba71407d3f5d00ce9b474bcec156de80fb6553fb2b52c5783636c2b9fe093  $bundle" | sha256sum --check
+          if gh release view v0.1.8 >/dev/null 2>&1; then
+            echo "Release v0.1.8 already exists; refusing to replace its assets."
             exit 1
           fi
-          gh release create v0.1.6 "$asset" --target "$GITHUB_SHA" --title "SVN 0.1.6 for OpenIDEA" --notes-file .release-upload/notes.md
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git bundle verify "$bundle"
+          git fetch "./$bundle" refs/heads/fix/history-copy-diff
+          test "$(git rev-parse FETCH_HEAD)" = "2990989c222cd39afc99bb1909928fb5b27931df"
+          git merge --no-ff --no-edit FETCH_HEAD
+          cp "$asset" "$RUNNER_TEMP/$asset"
+          cp release-notes-0.1.8.md "$RUNNER_TEMP/release-notes-0.1.8.md"
+          git rm -- "$asset" "$bundle" release-notes-0.1.8.md
+          git commit -m "Remove temporary 0.1.8 publishing assets"
+          git push origin HEAD:main
+          gh release create v0.1.8 "$RUNNER_TEMP/$asset" --target "$(git rev-parse HEAD)" --title "SVN 0.1.8 for OpenIDEA" --notes-file "$RUNNER_TEMP/release-notes-0.1.8.md"
