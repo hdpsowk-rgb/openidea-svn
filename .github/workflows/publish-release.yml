@@ -12,15 +12,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Verify and publish signed 0.1.5 package
+      - name: Verify and publish signed 0.1.6 package
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          asset=".release-upload/hdpsowk-rgb.svn-0.1.5.oiplugin"
-          echo "11781067dde1cee634edb12968900597091b0aa71998df6656c0c2f5fcf67657  $asset" | sha256sum --check
-          if gh release view v0.1.5 >/dev/null 2>&1; then
-            echo "Release v0.1.5 already exists; refusing to replace its assets."
+          asset=".release-upload/hdpsowk-rgb.svn-0.1.6.oiplugin"
+          echo "5a7cebf595614276ae49227ec928edfeeb8ec55470064cbf852b147e5c58b3e5  $asset" | sha256sum --check
+          if gh release view v0.1.6 >/dev/null 2>&1; then
+            echo "Release v0.1.6 already exists; refusing to replace its assets."
             exit 1
           fi
-          gh release create v0.1.5 "$asset" --target 2f1150321aacc67a02ba80ac40f4a582c9423469 --title "SVN 0.1.5 for OpenIDEA" --notes-file .release-upload/notes.md
+          gh release create v0.1.6 "$asset" --target 3f67f2df09fe8cc9e65b0fcb8f06a4bb84eab35e --title "SVN 0.1.6 for OpenIDEA" --notes-file .release-upload/notes.md
