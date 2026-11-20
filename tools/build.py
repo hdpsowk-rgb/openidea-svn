@@ -6,6 +6,7 @@ import argparse, hashlib, json, os, re, shutil, subprocess, zipfile
 ROOT=Path(__file__).resolve().parents[1]
 def main():
     parser=argparse.ArgumentParser();parser.add_argument('--skip-build',action='store_true');args=parser.parse_args()
+    subprocess.run(['python3',str(ROOT/'tools/build-file-icons.py'),'--check'],check=True)
     provenance=json.loads((ROOT/'vendor/openidea-plugin/PROVENANCE.json').read_text())
     for source,digest in provenance['files'].items():
         local=source.removeprefix('sdk/rust/openidea-plugin/')

@@ -7,20 +7,21 @@
 ## 安装
 
 1. 确认本机已有 `svn` 命令；Windows 需要命令行客户端 `svn.exe`。
-2. 下载 [GitHub Releases](https://github.com/hdpsowk-rgb/openidea-svn/releases) 中的 `hdpsowk-rgb.svn-0.1.6.oiplugin`。
+2. 下载 [GitHub Releases](https://github.com/hdpsowk-rgb/openidea-svn/releases) 中的 `hdpsowk-rgb.svn-0.1.7.oiplugin`。
 3. OpenIDEA → **Settings → Plugins → 齿轮 → Install Plugin from Package File…**，选择 `.oiplugin`，按 IDE 提示安装。
 4. 允许插件运行 `svn`。如果没有自动找到它，在该插件的 Permissions → `process:svn` → **Choose executable…** 中选择实际可执行文件。macOS Homebrew 常见位置为 `/opt/homebrew/bin/svn`。
 5. 打开已有 SVN 工作副本，用 **Find Action（⌘⇧A / Ctrl+Shift+A）** 搜索 **SVN: Open Tool Window**；也可以从 Tools 菜单打开。
 
 ZIP 与 `.oiplugin` 内容相同。也可解压 ZIP，使用 **Install Plugin from Disk…** 选择包含 `plugin.toml` 的目录。普通 IntelliJ 插件包不适用于 OpenIDEA。
 
-0.1.6 新增目录双击展开/收起、忽略与取消忽略，以及带明确确认的整目录还原。保留树状/列表视图、面板样式优化和默认关闭的自动刷新。
+0.1.7 新增 40 种文件图标与 14 种目录图标，覆盖常用语言、配置、资源、测试和项目文件。图标随插件离线打包，不读取文件内容，不增加 SVN 请求；与 IDE 文件图标主题独立。保留目录双击、忽略/取消忽略和默认关闭的自动刷新。
 
 ## 日常操作
 
 - **刷新设置**：工具栏下方可勾选「自动刷新」并设置 5–3600 秒间隔，默认关闭，默认间隔值为 30 秒。按工作区保存，重新打开后恢复；开启时仅在面板可见且没有进行中的操作时刷新。关闭时，保存文件和面板重新显示不会触发后台刷新；首次打开、切换目录、手动刷新及 SVN 操作完成后会读取一次状态。
 - **工作目录**：顶部下拉框列出当前工作区的项目目录，例如 `frontend` / `backend`。切换后，变更、日志、更新和提交都作用于选中目录；记住最近选择，各目录保留当前面板的提交说明草稿。操作进行中禁止切换，切换时清空文件勾选，避免误提交。非 SVN 目录会显示提示，可继续切换。
 - **本地变更**：显示修改、新增、删除、缺失、未跟踪、冲突和属性变化，默认按目录树显示，可切换为完整路径列表，并按工作区保存视图选择。支持双击目录展开/收起、展开/收起全部、方向键导航和路径筛选；筛选时自动展开匹配目录。目录复选框只勾选其下可提交的变更，部分勾选显示半选状态。刷新、折叠和切换视图保留文件勾选。项目树同步显示状态标记。
+- **文件图标**：按精确文件名、测试文件约定和扩展名识别，特殊文件优先，例如 Composer、NPM、Docker、Git 配置和锁文件。目录按名称分类；普通目录区分展开/收起。图标使用本地 SVG，在树状、列表和浅色/深色界面中复用，匹配结果缓存最多 2048 项。
 - **差异**：双击文件打开 IDE 原生左右对比，也可切换统一视图。主项目本地一侧包含编辑器尚未保存的内容；OpenIDEA 0.1.47 未向插件开放的附加目录显示已保存内容，有未保存修改时提示先保存。提交必须先保存。
 - **提交**：勾选文件、填写说明、点击提交；原生确认框列出最终目标。只提交已选路径，不自动添加同目录的其他文件。提交成功后清空说明并刷新。
 - **添加**：先点中未跟踪路径，再点添加。目录按空深度添加；刷新后可继续显式添加其子文件。
@@ -59,6 +60,7 @@ ZIP 与 `.oiplugin` 内容相同。也可解压 ZIP，使用 **Install Plugin fr
 rustup target add wasm32-wasip2
 cargo test --locked
 npm test
+python3 tools/build-file-icons.py --check
 python3 tools/build.py
 ```
 

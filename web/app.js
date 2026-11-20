@@ -1,3 +1,4 @@
+import {iconFor} from './file-icons.js';
 import {reconcileSelection, committable, shouldRefresh, acceptResponse, snapshotChanged, buildChangeTree, groupSelection, selectGroup} from './model.js';
 
 const $ = id => document.getElementById(id);
@@ -73,7 +74,7 @@ function renderFiles() {
       if(hasChildren){const disclosure=node('button','disclosure');disclosure.disabled=Boolean($('filter').value.trim());disclosure.setAttribute('aria-label',`${expanded?'收起':'展开'} ${branch.path}`);disclosure.addEventListener('click',e=>{e.stopPropagation();toggle();});row.append(disclosure);}
       else row.append(node('span','disclosure-placeholder'));
     }
-    const icon=node('span',directory||entry?.kind==='dir'?'folder-icon':'file-icon');icon.setAttribute('aria-hidden','true');row.append(icon);
+    const icon=node('span','file-kind-icon');icon.dataset.icon=iconFor(branch.path,{directory:directory||entry?.kind==='dir',expanded});icon.setAttribute('aria-hidden','true');row.append(icon);
     const status=entry?(entry.treeConflicted?'conflicted':entry.status):null;
     row.append(node('span','path',tree?branch.name:branch.path));
     if(directory)row.append(node('span','group-count muted',String(scope.length)));
