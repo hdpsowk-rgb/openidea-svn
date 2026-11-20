@@ -418,3 +418,23 @@ fn windows_selected_file_and_directory_actions_block_dirty_editors_with_differen
         );
     }
 }
+
+#[test]
+fn change_view_mode_persists_without_changing_refresh_preferences() {
+    let host = metadata_host();
+    let mut plugin = SvnPlugin::default();
+    let hello = plugin
+        .dispatch(request("hello", None, "tree-one"), &host.invocation())
+        .unwrap();
+    assert_eq!(hello["viewMode"], "tree");
+    assert_eq!(hello["settings"]["enabled"], false);
+    let mode=Request::parse(r#"{"client":"tree-one","generation":2,"root":"/project","action":"view-mode","viewMode":"list"}"#).unwrap();
+    let saved = plugin.dispatch(mode, &host.invocation()).unwrap();
+    assert_eq!(saved["viewMode"], "list");
+    let reopened = plugin
+        .dispatch(request("hello", None, "tree-two"), &host.invocation())
+        .unwrap();
+    assert_eq!(reopened["viewMode"], "list");
+    assert_eq!(reopened["settings"]["enabled"], false);
+    assert!(Request::parse(r#"{"client":"tree-one","generation":3,"root":"/project","action":"view-mode","viewMode":"arbitrary"}"#).is_err());
+}

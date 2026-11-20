@@ -8,6 +8,7 @@ pub struct Request {
     pub root: Option<String>,
     pub action: String,
     pub directory: Option<String>,
+    pub view_mode: Option<crate::preferences::ChangeView>,
     pub settings: Option<crate::preferences::RefreshSettings>,
     #[serde(default)]
     pub paths: Vec<String>,
@@ -41,6 +42,7 @@ impl Request {
             "hello"
                 | "select-root"
                 | "settings"
+                | "view-mode"
                 | "refresh"
                 | "poll"
                 | "cancel"
@@ -59,6 +61,9 @@ impl Request {
                 | "authenticate"
         ) {
             return Err("不支持的面板操作。".into());
+        }
+        if request.action == "view-mode" && request.view_mode.is_none() {
+            return Err("请选择列表或树状视图。".into());
         }
         if request.action == "settings" {
             request

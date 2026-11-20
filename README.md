@@ -7,20 +7,20 @@
 ## 安装
 
 1. 确认本机已有 `svn` 命令；Windows 需要命令行客户端 `svn.exe`。
-2. 下载 [GitHub Releases](https://github.com/hdpsowk-rgb/openidea-svn/releases) 中的 `hdpsowk-rgb.svn-0.1.3.oiplugin`。
+2. 下载 [GitHub Releases](https://github.com/hdpsowk-rgb/openidea-svn/releases) 中的 `hdpsowk-rgb.svn-0.1.5.oiplugin`。
 3. OpenIDEA → **Settings → Plugins → 齿轮 → Install Plugin from Package File…**，选择 `.oiplugin`，按 IDE 提示安装。
 4. 允许插件运行 `svn`。如果没有自动找到它，在该插件的 Permissions → `process:svn` → **Choose executable…** 中选择实际可执行文件。macOS Homebrew 常见位置为 `/opt/homebrew/bin/svn`。
 5. 打开已有 SVN 工作副本，用 **Find Action（⌘⇧A / Ctrl+Shift+A）** 搜索 **SVN: Open Tool Window**；也可以从 Tools 菜单打开。
 
 ZIP 与 `.oiplugin` 内容相同。也可解压 ZIP，使用 **Install Plugin from Disk…** 选择包含 `plugin.toml` 的目录。普通 IntelliJ 插件包不适用于 OpenIDEA。
 
-0.1.3 新增面板自动刷新开关与秒数配置（默认关闭），并修复 Windows 盘符、正反斜杠和路径大小写导致的 SVN 状态读取失败。保留 0.1.2 的附加目录差异编码修复。
+0.1.5 优化内置面板样式：统一图标与字体、对齐树状列表、整理操作工具栏，适配浅色/深色主题和窄小面板。支持树状/列表切换、目录批量勾选和工作区视图偏好；自动刷新仍默认关闭。
 
 ## 日常操作
 
 - **刷新设置**：工具栏下方可勾选「自动刷新」并设置 5–3600 秒间隔，默认关闭，默认间隔值为 30 秒。按工作区保存，重新打开后恢复；开启时仅在面板可见且没有进行中的操作时刷新。关闭时，保存文件和面板重新显示不会触发后台刷新；首次打开、切换目录、手动刷新及 SVN 操作完成后会读取一次状态。
 - **工作目录**：顶部下拉框列出当前工作区的项目目录，例如 `frontend` / `backend`。切换后，变更、日志、更新和提交都作用于选中目录；记住最近选择，各目录保留当前面板的提交说明草稿。操作进行中禁止切换，切换时清空文件勾选，避免误提交。非 SVN 目录会显示提示，可继续切换。
-- **本地变更**：显示修改、新增、删除、缺失、未跟踪、冲突和属性变化，支持路径过滤。项目树同步显示状态标记。
+- **本地变更**：显示修改、新增、删除、缺失、未跟踪、冲突和属性变化，默认按目录树显示，可切换为完整路径列表，并按工作区保存视图选择。支持展开/收起全部、方向键导航和路径筛选；筛选时自动展开匹配目录。目录复选框只勾选其下可提交的变更，部分勾选显示半选状态。刷新、折叠和切换视图保留文件勾选。项目树同步显示状态标记。
 - **差异**：双击文件打开 IDE 原生左右对比，也可切换统一视图。主项目本地一侧包含编辑器尚未保存的内容；OpenIDEA 0.1.47 未向插件开放的附加目录显示已保存内容，有未保存修改时提示先保存。提交必须先保存。
 - **提交**：勾选文件、填写说明、点击提交；原生确认框列出最终目标。只提交已选路径，不自动添加同目录的其他文件。提交成功后清空说明并刷新。
 - **添加**：先点中未跟踪路径，再点添加。目录按空深度添加；刷新后可继续显式添加其子文件。
@@ -76,4 +76,4 @@ Community package ID: `hdpsowk-rgb.svn`. If upgrading from the development-only 
 
 ## English summary
 
-Manage existing Subversion working copies inside OpenIDEA: select a workspace directory, inspect local changes in native diffs, explicitly add/revert/resolve files, commit selected paths, update/clean up the working copy, and browse revision history. Automatic refresh is **off by default** and can be enabled for visible panels with a configurable interval. Requires an installed SVN command-line client. Tested on macOS with OpenIDEA 0.1.47/API 1.10; Windows path behavior has regression coverage, but Windows GUI and remote hosts remain unverified.
+Manage existing Subversion working copies inside OpenIDEA: select a workspace directory, browse local changes in a collapsible directory tree or a flat list, inspect native diffs, explicitly add/revert/resolve files, commit selected paths, update/clean up the working copy, and browse revision history. Automatic refresh is **off by default** and can be enabled for visible panels with a configurable interval. Requires an installed SVN command-line client. Tested on macOS with OpenIDEA 0.1.47/API 1.10; Windows path behavior has regression coverage, but Windows GUI and remote hosts remain unverified.

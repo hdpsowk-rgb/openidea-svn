@@ -11,10 +11,10 @@
     <header>
       <div class="heading"><span class="svn-mark" aria-hidden="true">S</span><strong>SVN</strong><select id="project-root" aria-label="SVN 工作目录" title="选择工作区目录"><option value="">正在连接…</option></select><span id="repository" class="muted truncate">正在连接项目…</span></div>
       <nav aria-label="SVN 工具栏">
-        <button id="refresh" title="刷新工作副本">↻ 刷新</button>
-        <button id="update" data-write title="更新当前项目">↓ 更新</button>
-        <button id="cleanup" data-write title="清理工作副本管理锁">清理</button>
-        <button id="authenticate" title="在 IDE 终端中完成 SVN 认证">认证</button>
+        <button id="refresh" title="刷新工作副本"><span class="icon i-refresh" aria-hidden="true"></span>刷新</button>
+        <button id="update" data-write title="更新当前项目"><span class="icon i-update" aria-hidden="true"></span>更新</button>
+        <button id="cleanup" data-write title="清理工作副本管理锁"><span class="icon i-cleanup" aria-hidden="true"></span>清理</button>
+        <button id="authenticate" title="在 IDE 终端中完成 SVN 认证"><span class="icon i-key" aria-hidden="true"></span>认证</button>
         <button id="cancel" class="danger hidden">■ 取消操作</button>
       </nav>
       <div class="refresh-settings" aria-label="自动刷新设置">
@@ -32,8 +32,9 @@
       <div class="changes">
         <div class="filter-row"><input id="filter" type="search" placeholder="按路径筛选…" aria-label="筛选变更路径"><label class="check-all"><input id="check-all" type="checkbox">全选可提交项</label></div>
         <div class="file-toolbar" aria-label="文件操作">
-          <button id="diff">差异</button><button id="open">打开</button><button id="add" data-write>添加</button><button id="delete" data-write>删除</button><button id="revert" data-write>还原</button>
-          <select id="resolve" aria-label="解决选中文件的冲突" data-write><option value="">解决冲突…</option value="mine-full">使用我的版本</option><option value="theirs-full">使用仓库版本</option><option value="working">标记已解决</option></select>
+          <div class="action-tools"><button id="diff"><span class="icon i-diff" aria-hidden="true"></span>差异</button><button id="open"><span class="icon i-open" aria-hidden="true"></span>打开</button><button id="add" data-write><span class="icon i-add" aria-hidden="true"></span>添加</button><button id="delete" data-write><span class="icon i-delete" aria-hidden="true"></span>删除</button><button id="revert" data-write><span class="icon i-revert" aria-hidden="true"></span>还原</button>
+          <select id="resolve" aria-label="解决选中文件的冲突" data-write><option value="">解决冲突…</option value="mine-full">使用我的版本</option><option value="theirs-full">使用仓库版本</option><option value="working">标记已解决</option></select></div>
+          <div class="view-tools" aria-label="变更视图选项"><select id="changes-view" aria-label="本地变更视图"><option value="tree">树状</option><option value="list">列表</option></select><button id="expand-all" class="icon-button" aria-label="展开全部" title="展开全部"><span class="icon i-expand" aria-hidden="true"></span></button><button id="collapse-all" class="icon-button" aria-label="收起全部" title="收起全部（筛选时自动展开匹配目录）"><span class="icon i-collapse" aria-hidden="true"></span></button></div>
         </div>
         <div id="files" class="files" aria-label="变更文件列表"></div>
         <div id="empty" class="empty hidden"><span class="empty-mark">✓</span><strong>工作副本没有本地变更</strong><span class="muted">保存文件后点击刷新；也可启用自动刷新。</span></div>
@@ -42,10 +43,10 @@
         <div class="section-title">提交变更 <span id="selected-count" class="count">0</span></div>
         <p class="muted small">勾选文件后提交。新文件请先添加到版本控制。</p>
         <label for="message" class="small">提交说明</label>
-        <textarea id="message" placeholder="描述本次修改…" spellcheck="false"></textarea>
+        <textarea id="message" aria-label="提交说明" placeholder="描述本次修改…" spellcheck="false"></textarea>
         <div id="selection-summary" class="selection-summary muted">尚未选择文件</div>
         <button id="commit" class="primary" data-write disabled>提交所选文件</button>
-        <span class="muted small">⌘ / Ctrl + Enter 提交 · 双击文件查看差异</span>
+        <span class="muted small commit-hint">⌘ / Ctrl + Enter 提交 · 双击文件查看差异</span>
       </aside>
     </section>
     <section id="history-page" role="tabpanel" aria-labelledby="history-tab" class="page hidden">

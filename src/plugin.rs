@@ -1,5 +1,5 @@
 use crate::{
-    preferences::RefreshSettings,
+    preferences::{ChangeView, RefreshSettings},
     protocol::Request,
     svn::{self, Entry, Info, LogEntry},
     working_copy as wc,
@@ -78,7 +78,7 @@ impl SvnPlugin {
         if !roots.contains(&root)
             && !matches!(
                 request.action.as_str(),
-                "hello" | "select-root" | "settings" | "poll" | "cancel" | "draft"
+                "hello" | "select-root" | "view-mode" | "settings" | "poll" | "cancel" | "draft"
             )
         {
             return Err(wc::error("所选目录已从工作区移除，请选择其他目录。"));
@@ -93,7 +93,7 @@ impl SvnPlugin {
             .unwrap_or(&root);
         if !matches!(
             request.action.as_str(),
-            "hello" | "select-root" | "settings" | "poll" | "cancel" | "draft"
+            "hello" | "select-root" | "view-mode" | "settings" | "poll" | "cancel" | "draft"
         ) && self.sessions.iter().any(|(id, s)| {
             id != &request.client
                 && s.job.is_some()
@@ -238,7 +238,7 @@ impl SvnPlugin {
         if s.job.is_some()
             && !matches!(
                 r.action.as_str(),
-                "poll" | "cancel" | "draft" | "hello" | "settings"
+                "poll" | "cancel" | "draft" | "hello" | "view-mode" | "settings"
             )
         {
             return Err(wc::error("请等待当前操作完成。"));
@@ -249,6 +249,12 @@ impl SvnPlugin {
                 result["type"] = json!("hello");
                 result["draft"] = json!(s.draft);
                 result["settings"] = json!(RefreshSettings::load(&s.window_root));
+                result["viewMode"] = json!(ChangeView::load(&s.window_root));
+            }
+            "view-mode" => {
+                let mode = r.view_mode.ok_or("请选择列表或树状视图。")?;
+                mode.save(&s.window_root)?;
+                result["viewMode"] = json!(mode);
             }
             "settings" => {
                 let settings = r.settings.as_ref().ok_or("缺少刷新配置。")?;

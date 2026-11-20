@@ -38,3 +38,26 @@ impl RefreshSettings {
         )
     }
 }
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ChangeView {
+    #[default]
+    Tree,
+    List,
+}
+impl ChangeView {
+    pub fn load(workspace: &str) -> Self {
+        host::storage::get(&format!("change-view:{workspace}"))
+            .ok()
+            .flatten()
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or_default()
+    }
+    pub fn save(self, workspace: &str) -> Result<(), Error> {
+        host::storage::set(
+            &format!("change-view:{workspace}"),
+            &serde_json::to_string(&self).map_err(|e| Error::Failed(e.to_string()))?,
+        )
+    }
+}

@@ -5,7 +5,7 @@
 
 ```sh
 openidea-plugin check .
-openidea-plugin pack . --key /secure/path/hdpsowk-rgb.key --publisher hdpsowk-rgb --out release/hdpsowk-rgb.svn-0.1.3.oiplugin
+openidea-plugin pack . --key /secure/path/hdpsowk-rgb.key --publisher hdpsowk-rgb --out release/hdpsowk-rgb.svn-0.1.5.oiplugin
 ```
 
 3. Attach the signed `.oiplugin` to a GitHub release and compute its SHA-256.

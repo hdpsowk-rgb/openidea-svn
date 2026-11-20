@@ -1,8 +1,8 @@
-import {reconcileSelection, committable, shouldRefresh, acceptResponse, snapshotChanged} from './model.js';
+import {reconcileSelection, committable, shouldRefresh, acceptResponse, snapshotChanged, buildChangeTree, groupSelection, selectGroup} from './model.js';
 
 const $ = id => document.getElementById(id);
 const bridge = window.openidea;
-const state = {client:`svn-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,10)}`,root:null,pendingRoot:null,roots:[],generation:0,entries:[],selected:new Set(),active:null,logs:[],historyPaths:[],busy:false,lastRefresh:0,visible:true,documentVisible:!document.hidden,tab:'changes',info:null,refreshSettings:{enabled:false,intervalSeconds:30}};
+const state = {client:`svn-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,10)}`,root:null,pendingRoot:null,roots:[],generation:0,entries:[],selected:new Set(),active:null,logs:[],historyPaths:[],busy:false,lastRefresh:0,visible:true,documentVisible:!document.hidden,tab:'changes',info:null,refreshSettings:{enabled:false,intervalSeconds:30},viewMode:'tree',collapsed:new Set()};
 const labels = {modified:'修改',added:'新增',deleted:'删除',missing:'缺失',unversioned:'未跟踪',conflicted:'冲突',replaced:'替换（需终端确认）',external:'外部副本',normal:'属性修改',obstructed:'阻塞',incomplete:'不完整',ignored:'已忽略'};
 const badges = {modified:'M',added:'A',deleted:'D',missing:'!',unversioned:'?',conflicted:'C',replaced:'R',external:'X',normal:'P',obstructed:'~',incomplete:'!'};
 
@@ -23,6 +23,9 @@ function setBusy(busy,label) {
   $('message').disabled=busy;
   $('project-root').disabled=busy;
   $('auto-refresh').disabled=busy;
+  $('changes-view').disabled=busy;
+  $('check-all').disabled=busy;
+  for(const el of document.querySelectorAll('#files input[type=checkbox]'))el.disabled=busy||el.dataset.eligible!=='true';
   $('refresh-interval').disabled=busy||!state.refreshSettings.enabled;
   $('status').textContent=label || (busy?'正在执行…':`${state.entries.length} 项本地变更`);
   $('cancel').classList.toggle('hidden',!busy);
@@ -40,22 +43,57 @@ function updateSelection() {
   $('check-all').checked=eligible.length>0&&checked===eligible.length;
   $('check-all').indeterminate=checked>0&&checked<eligible.length;
 }
+function focusRow(path,activate=false) {const row=[...$('files').children].find(el=>el.dataset.path===path);if(row&&activate)activatePath(row.dataset.entryPath||null);row?.focus?.();}
+function activatePath(path) {
+  state.active=path;
+  for(const row of $('files').children)row.classList.toggle('active',Boolean(path)&&row.dataset.path===path);
+}
 function renderFiles() {
-  const files=$('files');files.replaceChildren();const entries=visibleEntries();
+  const files=$('files');files.replaceChildren();const entries=visibleEntries();const tree=state.viewMode==='tree';
+  files.setAttribute('role',tree?'tree':'list');
+  $('changes-view').value=state.viewMode;
+  $('expand-all').classList.toggle('hidden',!tree);$('collapse-all').classList.toggle('hidden',!tree);
+  $('collapse-all').disabled=Boolean($('filter').value.trim());
   $('empty').classList.toggle('hidden',state.entries.length!==0||!state.info);
   $('change-count').textContent=state.entries.length;
-  for(const entry of entries) {
-    const row=node('div',`file${state.active===entry.path?' active':''}`);row.tabIndex=0;row.title=entry.path;
-    const checkbox=node('input');checkbox.type='checkbox';checkbox.checked=state.selected.has(entry.path);checkbox.disabled=!committable(entry);checkbox.setAttribute('aria-label',`选择 ${entry.path}`);
-    checkbox.addEventListener('click',e=>e.stopPropagation());checkbox.addEventListener('change',()=>{if(checkbox.checked)state.selected.add(entry.path);else state.selected.delete(entry.path);updateSelection();});
-    const status=entry.treeConflicted?'conflicted':entry.status;
-    row.append(checkbox,node('span',`badge ${status}`,badges[status]||'?'),node('span','path',entry.path),node('span','kind',labels[status]||status));
-    row.addEventListener('click',()=>{state.active=entry.path;renderFiles();});
-    row.addEventListener('dblclick',()=>request('diff',{paths:[entry.path]}));
-    row.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();request('diff',{paths:[entry.path]});}if(e.key===' '&&!checkbox.disabled){e.preventDefault();checkbox.checked=!checkbox.checked;checkbox.dispatchEvent(new Event('change'));}});
+  function appendRow(branch,depth) {
+    const entry=branch.entry;const directory=tree&&branch.directory;const hasChildren=directory&&branch.children.length>0;
+    const expanded=hasChildren&&(!$('filter').value.trim()? !state.collapsed.has(branch.path):true);
+    const scope=directory?branch.entries:(entry?[entry]:[]);
+    const row=node('div',`file${directory?' directory':''}${state.active===branch.path?' active':''}`);row.tabIndex=0;row.title=branch.path;row.dataset.path=branch.path;row.dataset.entryPath=entry?.path||'';
+    row.setAttribute('role',tree?'treeitem':'listitem');if(tree){row.setAttribute('aria-level',String(depth+1));row.setAttribute('style',`--tree-indent:${depth*16}px`);}
+    if(hasChildren)row.setAttribute('aria-expanded',String(expanded));
+    const toggle=()=>{if(!hasChildren||$('filter').value.trim())return;if(state.collapsed.has(branch.path))state.collapsed.delete(branch.path);else state.collapsed.add(branch.path);renderFiles();focusRow(branch.path);};
+    const checkbox=node('input');checkbox.type='checkbox';const group=groupSelection(scope,state.selected);checkbox.checked=group.checked;checkbox.indeterminate=group.indeterminate;checkbox.disabled=group.disabled||state.busy;checkbox.dataset.eligible=String(!group.disabled);
+    checkbox.setAttribute('aria-label',directory?`选择目录 ${branch.path} 中的可提交项`:`选择 ${branch.path}`);
+    const change=()=>{state.selected=selectGroup(state.selected,scope,checkbox.checked);state.active=null;renderFiles();focusRow(branch.path);};
+    checkbox.addEventListener('click',e=>e.stopPropagation());checkbox.addEventListener('change',change);row.append(checkbox);
+    if(tree) {
+      if(hasChildren){const disclosure=node('button','disclosure');disclosure.disabled=Boolean($('filter').value.trim());disclosure.setAttribute('aria-label',`${expanded?'收起':'展开'} ${branch.path}`);disclosure.addEventListener('click',e=>{e.stopPropagation();toggle();});row.append(disclosure);}
+      else row.append(node('span','disclosure-placeholder'));
+    }
+    const icon=node('span',directory||entry?.kind==='dir'?'folder-icon':'file-icon');icon.setAttribute('aria-hidden','true');row.append(icon);
+    const status=entry?(entry.treeConflicted?'conflicted':entry.status):null;
+    row.append(node('span','path',tree?branch.name:branch.path));
+    if(directory)row.append(node('span','group-count muted',String(scope.length)));
+    if(status){row.append(node('span',`badge ${status}`,badges[status]||'?'),node('span','kind',labels[status]||status));row.dataset.status=status;}
+    row.addEventListener('click',()=>activatePath(entry?entry.path:null));
+    if(!directory&&entry)row.addEventListener('dblclick',()=>request('diff',{paths:[entry.path]}));
+    row.addEventListener('keydown',e=>{
+      if(e.target!==row)return;
+      if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();const rows=[...files.children].filter(el=>el.dataset.path);const i=rows.indexOf(row);focusRow(rows[i+(e.key==='ArrowDown'?1:-1)]?.dataset.path,true);}
+      if(e.key==='ArrowRight'&&hasChildren){e.preventDefault();if(!expanded){state.collapsed.delete(branch.path);renderFiles();focusRow(branch.path,true);}else focusRow(branch.children[0].path,true);}
+      if(e.key==='ArrowLeft'&&tree){e.preventDefault();if(hasChildren&&expanded&&!$('filter').value.trim()){state.collapsed.add(branch.path);renderFiles();focusRow(branch.path,true);}else if(branch.path.includes('/'))focusRow(branch.path.slice(0,branch.path.lastIndexOf('/')),true);}
+      if(e.key==='Enter'){e.preventDefault();if(directory)toggle();else if(entry)request('diff',{paths:[entry.path]});}
+      if(e.key===' '&&!checkbox.disabled){e.preventDefault();checkbox.checked=!checkbox.checked;change();}
+    });
     files.append(row);
+    if(expanded)for(const child of branch.children)appendRow(child,depth+1);
   }
+  if(tree)for(const branch of buildChangeTree(entries))appendRow(branch,0);
+  else for(const entry of entries)appendRow({entry,path:entry.path,name:entry.path,directory:false,children:[]},0);
   if(!entries.length&&state.entries.length)files.append(node('div','empty muted','没有匹配的路径'));
+  if(state.active&&![...files.children].some(row=>row.dataset.path===state.active))state.active=null;
   updateSelection();
 }
 function switchTab(tab, load=true) {
@@ -93,7 +131,7 @@ function renderRoots(roots) {
   select.value=state.pendingRoot||state.root||roots[0]||'';select.title=select.value;
 }
 function resetDirectory() {
-  state.entries=[];state.selected=new Set();state.active=null;state.logs=[];state.historyPaths=[];state.info=null;state.lastRefresh=0;
+  state.entries=[];state.selected=new Set();state.active=null;state.logs=[];state.historyPaths=[];state.info=null;state.lastRefresh=0;state.collapsed=new Set();
   $('filter').value='';$('message').value='';$('output').textContent='';$('repository').textContent='正在读取工作副本…';$('repository').title='';
   renderFiles();renderHistory();$('log-detail').replaceChildren(node('div','empty muted','选择一条提交记录'));switchTab('changes',false);
 }
@@ -116,6 +154,7 @@ if(bridge) {
     if(message.type==='hello')state.pendingRoot=null;
     if(message.root){state.root=message.root;$('root').textContent=message.root;$('root').title=message.root;}
     if(message.settings){state.refreshSettings=message.settings;$('auto-refresh').checked=message.settings.enabled;$('refresh-interval').value=String(message.settings.intervalSeconds);state.lastRefresh=Date.now();}
+    if(message.viewMode){state.viewMode=message.viewMode;renderFiles();}
     if(message.roots)renderRoots(message.roots);
     if(message.output)output(message.output);
     if(message.info){state.info=message.info;$('repository').textContent=`${message.info.url} · r${message.info.revision}`;$('repository').title=message.info.url;}
@@ -124,7 +163,7 @@ if(bridge) {
     if(message.selectPaths){state.selected=new Set(message.selectPaths.filter(p=>state.entries.some(e=>e.path===p&&committable(e))));state.active=message.selectPaths[0]||null;renderFiles();}
     if(message.clearMessage)$('message').value='';
     if(message.type==='hello'){$('message').value=message.draft||'';updateSelection();}
-    if(message.error){notice(message.error);$('auto-refresh').checked=state.refreshSettings.enabled;$('refresh-interval').value=String(state.refreshSettings.intervalSeconds);}
+    if(message.error){notice(message.error);$('changes-view').value=state.viewMode;$('auto-refresh').checked=state.refreshSettings.enabled;$('refresh-interval').value=String(state.refreshSettings.intervalSeconds);}
     setBusy(Boolean(message.busy),message.status);
     if(message.menuDirectory&&message.menuDirectory!==state.root&&!state.busy){selectRoot(message.menuDirectory);return;}
     if(message.type==='hello'){request('refresh');}
@@ -154,11 +193,14 @@ function saveRefreshSettings() {
 }
 $('auto-refresh').addEventListener('change',saveRefreshSettings);
 $('refresh-interval').addEventListener('change',saveRefreshSettings);
+$('changes-view').addEventListener('change',()=>request('view-mode',{viewMode:$('changes-view').value}));
+$('expand-all').addEventListener('click',()=>{state.collapsed.clear();renderFiles();});
+$('collapse-all').addEventListener('click',()=>{if($('filter').value.trim())return;const collect=nodes=>{for(const n of nodes){if(n.directory)state.collapsed.add(n.path);collect(n.children);}};collect(buildChangeTree(state.entries));renderFiles();});
 $('project-root').addEventListener('change',()=>selectRoot($('project-root').value));
 $('filter').addEventListener('input',renderFiles);
 $('message').addEventListener('input',()=>{updateSelection();if(!state.busy)send('draft',{message:$('message').value},false);});
 $('message').addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)&&!$('commit').disabled){e.preventDefault();$('commit').click();}});
-$('check-all').addEventListener('change',()=>{for(const entry of visibleEntries().filter(committable)){if($('check-all').checked)state.selected.add(entry.path);else state.selected.delete(entry.path);}renderFiles();});
+$('check-all').addEventListener('change',()=>{state.active=null;for(const entry of visibleEntries().filter(committable)){if($('check-all').checked)state.selected.add(entry.path);else state.selected.delete(entry.path);}renderFiles();});
 for(const button of document.querySelectorAll('[data-tab]'))button.addEventListener('click',()=>switchTab(button.dataset.tab));
 for(const action of ['refresh','update','cleanup','authenticate'])$(action).addEventListener('click',()=>request(action));
 for(const action of ['diff','open','add','delete','revert'])$(action).addEventListener('click',()=>fileAction(action));
