@@ -3,7 +3,7 @@ import {reconcileSelection, committable, shouldRefresh, acceptResponse, snapshot
 
 const $ = id => document.getElementById(id);
 const bridge = window.openidea;
-const state = {client:`svn-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,10)}`,root:null,pendingRoot:null,roots:[],generation:0,entries:[],selected:new Set(),active:null,activeFolder:null,includeIgnored:false,logs:[],historyPaths:[],pendingHistoryPaths:null,historyHasMore:false,historyLimitReached:false,busy:false,lastRefresh:0,visible:true,documentVisible:!document.hidden,tab:'changes',info:null,refreshSettings:{enabled:false,intervalSeconds:30},viewMode:'tree',collapsed:new Set()};
+const state = {client:`svn-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,10)}`,root:null,pendingRoot:null,roots:[],generation:0,entries:[],selected:new Set(),active:null,activeFolder:null,includeIgnored:false,logs:[],historyPaths:[],pendingHistoryPaths:null,historyHasMore:false,historyLimitReached:false,busy:false,inFlightAction:null,showRefreshPending:false,lastRefresh:0,visible:true,documentVisible:!document.hidden,tab:'changes',info:null,refreshSettings:{enabled:false,intervalSeconds:30},viewMode:'tree',collapsed:new Set()};
 const labels = {modified:'修改',added:'新增',deleted:'删除',missing:'缺失',unversioned:'未跟踪',conflicted:'冲突',replaced:'替换（需终端确认）',external:'外部副本',normal:'属性修改',obstructed:'阻塞',incomplete:'不完整',ignored:'已忽略'};
 const badges = {modified:'M',added:'A',deleted:'D',missing:'!',unversioned:'?',conflicted:'C',replaced:'R',external:'X',ignored:'I',normal:'P',obstructed:'~',incomplete:'!'};
 
@@ -14,8 +14,9 @@ function send(action, extra={}, next=true) {
 }
 function request(action, extra={}) {
   if (state.busy) return;
-  if (action==='refresh') {state.lastRefresh=Date.now();extra={includeIgnored:$('show-ignored').checked,...extra};}
+  if (action==='refresh') {state.showRefreshPending=false;state.lastRefresh=Date.now();extra={includeIgnored:$('show-ignored').checked,...extra};}
   if(action==='log')state.pendingHistoryPaths=[...(extra.paths||[])];
+  state.inFlightAction=action;
   notice(''); setBusy(true, '正在执行…'); send(action,extra);
 }
 function notice(text) { $('notice').textContent=text; $('notice').classList.toggle('hidden',!text); }
@@ -138,7 +139,7 @@ function renderRoots(roots) {
   select.value=state.pendingRoot||state.root||roots[0]||'';select.title=select.value;
 }
 function resetDirectory() {
-  state.entries=[];state.selected=new Set();state.active=null;state.activeFolder=null;state.logs=[];state.historyPaths=[];state.pendingHistoryPaths=null;state.historyHasMore=false;state.historyLimitReached=false;state.info=null;state.lastRefresh=0;state.collapsed=new Set();
+  state.entries=[];state.selected=new Set();state.active=null;state.activeFolder=null;state.logs=[];state.historyPaths=[];state.pendingHistoryPaths=null;state.historyHasMore=false;state.historyLimitReached=false;state.info=null;state.showRefreshPending=false;state.lastRefresh=0;state.collapsed=new Set();
   $('filter').value='';$('message').value='';$('output').textContent='';$('repository').textContent='正在读取工作副本…';$('repository').title='';
   renderFiles();renderHistory();$('log-detail').replaceChildren(node('div','empty muted','选择一条提交记录'));switchTab('changes',false);
 }
@@ -173,6 +174,7 @@ if(bridge) {
     if(message.type==='hello'){$('message').value=message.draft||'';updateSelection();}
     if(message.error){state.pendingHistoryPaths=null;notice(message.error);$('show-ignored').checked=state.includeIgnored;$('changes-view').value=state.viewMode;$('auto-refresh').checked=state.refreshSettings.enabled;$('refresh-interval').value=String(state.refreshSettings.intervalSeconds);}
     setBusy(Boolean(message.busy),message.status);
+    if(!state.busy)state.inFlightAction=null;
     if(message.menuDirectory&&message.menuDirectory!==state.root&&!state.busy){selectRoot(message.menuDirectory);return;}
     if(message.type==='hello'){request('refresh');}
     if(message.menu){
@@ -185,7 +187,7 @@ if(bridge) {
       else if(action==='update')request('update');
       else switchTab('changes');
     }
-    if((message.needsRefresh||state.pendingMenu)&&!message.busy&&!state.busy){state.pendingMenu=false;request('refresh');}
+    if((message.needsRefresh||state.pendingMenu||state.showRefreshPending&&state.visible&&state.documentVisible)&&!message.busy&&!state.busy){state.pendingMenu=false;request('refresh');}
   });
   $('refresh-interval').value='30';$('refresh-interval').disabled=true;
   send('hello');
@@ -221,8 +223,16 @@ $('reload-log').addEventListener('click',()=>request('log',{paths:state.historyP
 $('project-log').addEventListener('click',()=>{if(state.busy)return;request('log',{paths:[]});});
 $('more-log').addEventListener('click',()=>{const revision=state.logs.at(-1)?.revision;if(state.historyHasMore&&revision>1)request('log',{paths:state.historyPaths,revision:revision-1,append:true});});
 $('clear-output').addEventListener('click',()=>{$('output').textContent='';});
-document.addEventListener('visibilitychange',()=>{state.documentVisible=!document.hidden;});
-new IntersectionObserver(entries=>{state.visible=entries.some(entry=>entry.isIntersecting);}).observe(document.querySelector('main'));
+function updateVisibility(key,value) {
+  const wasVisible=state.visible&&state.documentVisible;
+  state[key]=value;
+  if(!wasVisible&&state.visible&&state.documentVisible&&state.root&&state.inFlightAction!=='refresh') {
+    state.showRefreshPending=true;
+    if(!state.busy)request('refresh');
+  }
+}
+document.addEventListener('visibilitychange',()=>updateVisibility('documentVisible',!document.hidden));
+new IntersectionObserver(entries=>updateVisibility('visible',entries.some(entry=>entry.isIntersecting))).observe(document.querySelector('main'));
 setInterval(()=>{
   if(!bridge)return;
   if(state.busy)send('poll',{},false);
