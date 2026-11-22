@@ -14,28 +14,28 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Publish reviewed source and signed 0.1.10 package
+      - name: Publish reviewed source and signed 0.1.11 package
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          asset="hdpsowk-rgb.svn-0.1.10.oiplugin"
-          bundle="release-source-0.1.10.bundle"
-          echo "2f06bc2ed2808173b8c740833b039ada2f09abb4286b5a3751b575198244ca92  $asset" | sha256sum --check
-          echo "c4fb13b93ebf91e09e751171a06d470d28af7b07c1e945e701be9249454b6143  $bundle" | sha256sum --check
-          if gh release view v0.1.10 >/dev/null 2>&1; then
-            echo "Release v0.1.10 already exists; refusing to replace its assets."
+          asset="hdpsowk-rgb.svn-0.1.11.oiplugin"
+          bundle="release-source-0.1.11.bundle"
+          echo "8fc8e190fbf82962612e267779a00caeb6445c0703fad8b63b04748a53552826  $asset" | sha256sum --check
+          echo "6db15976dfbaa59c5493f6a2a9f0329a913fccc12c1868b02e652c4e7486b1fc  $bundle" | sha256sum --check
+          if gh release view v0.1.11 >/dev/null 2>&1; then
+            echo "Release v0.1.11 already exists; refusing to replace its assets."
             exit 1
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git bundle verify "$bundle"
-          git fetch "./$bundle" refs/heads/fix/svn-bug-audit
-          test "$(git rev-parse FETCH_HEAD)" = "35083c7a800b4ef196a0ee817fff42d015e532e1"
+          git fetch "./$bundle" refs/heads/fix/refresh-on-panel-open
+          test "$(git rev-parse FETCH_HEAD)" = "ad7b195a42efc7e0bbee986b22762962a5dd6125"
           git merge --no-ff --no-edit FETCH_HEAD
           cp "$asset" "$RUNNER_TEMP/$asset"
-          cp release-notes-0.1.10.md "$RUNNER_TEMP/release-notes-0.1.10.md"
-          git rm -- "$asset" "$bundle" release-notes-0.1.10.md
-          git commit -m "Remove temporary 0.1.10 publishing assets"
+          cp release-notes-0.1.11.md "$RUNNER_TEMP/release-notes-0.1.11.md"
+          git rm -- "$asset" "$bundle" release-notes-0.1.11.md
+          git commit -m "Remove temporary 0.1.11 publishing assets"
           git push origin HEAD:main
-          gh release create v0.1.10 "$RUNNER_TEMP/$asset" --target "$(git rev-parse HEAD)" --title "SVN 0.1.10 for OpenIDEA" --notes-file "$RUNNER_TEMP/release-notes-0.1.10.md"
+          gh release create v0.1.11 "$RUNNER_TEMP/$asset" --target "$(git rev-parse HEAD)" --title "SVN 0.1.11 for OpenIDEA" --notes-file "$RUNNER_TEMP/release-notes-0.1.11.md"
